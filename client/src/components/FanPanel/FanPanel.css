@@ -1,0 +1,79 @@
+.fan-panel {
+  background: rgba(20, 20, 40, 0.92);
+  border: 1px solid rgba(240,192,64,0.3);
+  border-radius: 10px;
+  padding: 12px 16px;
+  min-width: 180px;
+  max-width: 220px;
+  color: #fff;
+}
+
+.fan-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+
+.fan-panel__total {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #f0c040;
+}
+
+.fan-panel__badge {
+  font-size: 0.75rem;
+  background: rgba(231,76,60,0.3);
+  color: #e74c3c;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(231,76,60,0.4);
+}
+
+.fan-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.fan-panel__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.fan-panel__item--flower .fan-panel__name { color: #c39bd3; }
+
+.fan-panel__name { color: rgba(255,255,255,0.85); }
+.fan-panel__value { color: #f0c040; font-weight: 600; }
+
+.fan-panel__divider {
+  height: 1px;
+  background: rgba(255,255,255,0.1);
+  margin: 4px 0;
+}
+
+.fan-panel__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.fan-btn {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.fan-btn:hover { opacity: 0.85; }
+.fan-btn--win { background: #e74c3c; color: #fff; }
+.fan-btn--continue { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.7); }

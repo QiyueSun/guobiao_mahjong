@@ -1,0 +1,79 @@
+.settlement-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.settlement {
+  background: #1a1a2e;
+  border: 1px solid rgba(240,192,64,0.35);
+  border-radius: 14px;
+  padding: 28px 32px;
+  max-width: 440px;
+  width: 90%;
+  color: #fff;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+}
+
+.settlement__header { text-align: center; margin-bottom: 20px; }
+.settlement__title { font-size: 1.6rem; font-weight: 700; color: #f0c040; margin: 0 0 6px; }
+.settlement__subtitle { color: rgba(255,255,255,0.6); font-size: 0.9rem; margin: 0; }
+
+.settlement__fans, .settlement__scores { margin-bottom: 20px; }
+.settlement__fans h3, .settlement__scores h3 {
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding-bottom: 6px;
+}
+
+.settlement__fan-list { display: flex; flex-direction: column; gap: 4px; }
+.settlement__fan-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.8);
+}
+.settlement__fan-row--flower { color: #c39bd3; }
+.settlement__fan-val { color: #f0c040; font-weight: 600; }
+.settlement__fan-total { font-weight: 700; font-size: 1rem; }
+.settlement__sep { height: 1px; background: rgba(255,255,255,0.08); margin: 4px 0; }
+
+.settlement__score-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.9rem;
+  padding: 4px 0;
+}
+.settlement__score-row--me { background: rgba(240,192,64,0.07); border-radius: 4px; padding: 4px 6px; }
+.settlement__score-name small { color: rgba(255,255,255,0.4); margin-left: 4px; }
+.settlement__score-delta.pos { color: #2ecc71; font-weight: 700; }
+.settlement__score-delta.neg { color: #e74c3c; font-weight: 700; }
+.settlement__score-after { color: rgba(255,255,255,0.5); font-size: 0.85rem; }
+
+.settlement__footer { text-align: center; }
+.settlement__next-info { color: rgba(255,255,255,0.55); font-size: 0.85rem; margin-bottom: 12px; }
+.settlement__gameover { color: #f0c040; font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+.settlement__waiting { color: rgba(255,255,255,0.4); font-size: 0.85rem; }
+
+.settlement__btn {
+  background: #27ae60;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 36px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.settlement__btn:hover { opacity: 0.9; }

@@ -1,0 +1,41 @@
+version: '3.9'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+
+  server:
+    build: ./server
+    ports:
+      - "3001:3001"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SESSION_SECRET=${SESSION_SECRET:-dev-secret-change-in-prod}
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - CLIENT_ORIGIN=http://localhost:5173
+      - SHARE_BASE_URL=http://localhost:5173
+    depends_on:
+      - redis
+    volumes:
+      - ./server/src:/app/src
+    command: npm run dev
+
+  client:
+    build:
+      context: ./client
+      args:
+        VITE_WS_URL: http://localhost:3001
+        VITE_API_BASE: /api/v1
+    ports:
+      - "5173:80"
+    depends_on:
+      - server
+
+volumes:
+  redis_data:
