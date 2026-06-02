@@ -1,4 +1,4 @@
-import { PlayerId, PlayerState, FanResult } from '../types';
+import { PlayerId, FanResult } from '../types';
 
 const MIN_FAN = 8;
 
