@@ -2,7 +2,9 @@ import { Server, Socket } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 import { roomManager } from '../rooms/RoomManager';
 import { GameEvent } from '../game/GameEngine';
-import { GameState, PlayerState, SettlementData } from '../types';
+import { GameState, PlayerState, RoomSettings, SettlementData } from '../types';
+import { ALLOWED_TOTAL_ROUNDS, ALLOWED_ACTION_TIMEOUT_SECONDS, ALLOWED_BOT_COUNTS } from '../rooms/roomSettings';
+import { recordCompletedGame } from '../db/gameHistory';
 import { logger } from '../logger';
 
 interface SessionMap {
@@ -29,15 +31,58 @@ export function setupSocketHandler(io: Server): void {
       reconnected: !!existingPlayerId,
     });
 
+    // Auto-restore room session on reconnect
+    const existingRoom = roomManager.getRoomByPlayer(playerId);
+    if (existingRoom) {
+      existingRoom.cancelWaitingDisconnect(playerId);
+      existingRoom.handleReconnect(playerId);
+      sessions[socket.id].roomCode = existingRoom.code;
+      socket.join(existingRoom.code);
+      socket.emit('room:updated', {
+        code: existingRoom.code,
+        phase: existingRoom.phase,
+        hostId: existingRoom.hostId,
+        players: existingRoom.playerIds.map(pid => ({
+          id: pid,
+          nickname: existingRoom.nicknames[pid],
+          isReady: existingRoom.readySet.has(pid),
+          isHost: pid === existingRoom.hostId,
+        })),
+        randomSeats: existingRoom.randomSeats,
+        settings: existingRoom.settings,
+      });
+      if (existingRoom.engine) {
+        emitGameState(socket, existingRoom.engine.getState(), playerId);
+        socket.emit('game:started');
+        const timer = existingRoom.engine.getCurrentTimer();
+        if (timer) socket.emit('game:turnTimer', timer);
+        // Re-send pending chi/pong/kong/win/pass options if this player has an outstanding decision
+        const pending = existingRoom.engine.getState().pendingActions
+          .find(a => a.playerId === playerId && !a.responded);
+        if (pending) {
+          socket.emit('game:canAct', {
+            actions: pending.availableActions,
+            chiOptions: pending.chiOptions,
+            timeoutAt: pending.deadline,
+          });
+        }
+        // Re-send settlement overlay (round end / liuju) if the round just ended
+        if (existingRoom.engine.getState().phase === 'settled') {
+          const settlement = existingRoom.engine.getLastSettlement();
+          if (settlement) socket.emit('game:settled', settlement);
+        }
+      }
+    }
+
     // ── Room events ─────────────────────────────────────────────────────────
 
-    socket.on('room:create', (payload: { nickname: string }) => {
+    socket.on('room:create', (payload: { nickname: string; settings?: Partial<RoomSettings> }) => {
       try {
         const nickname = sanitizeNickname(payload?.nickname);
         sessions[socket.id].nickname = nickname;
         sessions[socket.id].playerId = playerId;
 
-        const room = roomManager.createRoom(playerId, nickname);
+        const room = roomManager.createRoom(playerId, nickname, sanitizeSettings(payload?.settings));
         sessions[socket.id].roomCode = room.code;
 
         socket.join(room.code);
@@ -67,6 +112,8 @@ export function setupSocketHandler(io: Server): void {
         // If game in progress, send current state
         if (room.engine) {
           emitGameState(socket, room.engine.getState(), playerId);
+          const timer = room.engine.getCurrentTimer();
+          if (timer) socket.emit('game:turnTimer', timer);
         }
       } catch (e: unknown) {
         const msg = String(e);
@@ -128,12 +175,34 @@ export function setupSocketHandler(io: Server): void {
       const state = room.engine.getState();
       if (state.phase !== 'settled') return;
 
-      // Advance to next round if available
-      // (settlement data stored in last event)
       try {
         await room.beginRound();
       } catch (e: unknown) {
         socket.emit('game:error', { code: 'ROUND_FAILED', message: String(e) });
+      }
+    });
+
+    socket.on('room:next_ready', async () => {
+      const { roomCode } = sessions[socket.id];
+      if (!roomCode) return;
+      const room = roomManager.getRoom(roomCode);
+      if (!room || !room.engine) return;
+
+      const state = room.engine.getState();
+      if (state.phase !== 'settled') return;
+
+      const count = room.markNextReady(playerId);
+      io.to(roomCode).emit('room:next_ready_update', {
+        count,
+        total: room.playerIds.length,
+      });
+
+      if (room.allNextReady()) {
+        try {
+          await room.beginRound();
+        } catch (e: unknown) {
+          socket.emit('game:error', { code: 'ROUND_FAILED', message: String(e) });
+        }
       }
     });
 
@@ -143,6 +212,16 @@ export function setupSocketHandler(io: Server): void {
       const room = roomManager.getRoom(roomCode);
       if (!room || room.hostId !== playerId) return;
       room.randomSeats = !!payload?.enabled;
+      broadcastRoomState(io, roomCode);
+    });
+
+    socket.on('room:update_settings', (payload: Partial<RoomSettings>) => {
+      const { roomCode } = sessions[socket.id];
+      if (!roomCode) return;
+      const room = roomManager.getRoom(roomCode);
+      if (!room || room.hostId !== playerId) return;
+      if (room.phase !== 'waiting') return;
+      room.updateSettings(sanitizeSettings(payload));
       broadcastRoomState(io, roomCode);
     });
 
@@ -184,6 +263,24 @@ export function setupSocketHandler(io: Server): void {
       });
     });
 
+    socket.on('game:extend_timer', () => {
+      const { roomCode } = sessions[socket.id];
+      if (!roomCode) return;
+      const room = roomManager.getRoom(roomCode);
+      if (!room?.engine) return;
+      const timer = room.engine.extendCurrentTimer(10_000);
+      if (timer) io.to(roomCode).emit('game:turnTimer', timer);
+    });
+
+    socket.on('game:requestTenpaiInfo', () => {
+      const { roomCode } = sessions[socket.id];
+      if (!roomCode) return;
+      const room = roomManager.getRoom(roomCode);
+      if (!room?.engine) return;
+      const tiles = room.engine.computeTenpaiInfo(playerId);
+      socket.emit('game:tenpaiInfo', { tiles });
+    });
+
     // ── Disconnect ──────────────────────────────────────────────────────────
 
     socket.on('disconnect', () => {
@@ -196,12 +293,14 @@ export function setupSocketHandler(io: Server): void {
           if (room.phase === 'playing') {
             room.handleDisconnect(playerId);
           } else {
-            room.removePlayer(playerId);
-            if (room.isEmpty) {
-              roomManager.closeRoom(roomCode);
-            } else {
-              broadcastRoomState(io, roomCode);
-            }
+            room.handleWaitingDisconnect(playerId, () => {
+              room.removePlayer(playerId);
+              if (room.isEmpty) {
+                roomManager.closeRoom(roomCode);
+              } else {
+                broadcastRoomState(io, roomCode);
+              }
+            });
           }
         }
       }
@@ -248,6 +347,11 @@ function handleGameEvent(
           fanHint: event.fanHint,
         });
       }
+      // Broadcast timer so all players see whose turn it is and how long they have
+      io.to(roomCode).emit('game:turnTimer', {
+        playerId: event.playerId,
+        timeoutAt: event.timeoutAt,
+      });
       break;
     }
 
@@ -259,6 +363,13 @@ function handleGameEvent(
         meld: event.meld,
         flowerRevealed: event.flowerRevealed,
       });
+      // Chi/pong start a new discard timer for the claiming player
+      if (event.timeoutAt !== undefined) {
+        io.to(roomCode).emit('game:turnTimer', {
+          playerId: event.playerId,
+          timeoutAt: event.timeoutAt,
+        });
+      }
       break;
 
     case 'canAct': {
@@ -271,6 +382,11 @@ function handleGameEvent(
           timeoutAt: event.timeoutAt,
         });
       }
+      // Broadcast timer to all players so everyone can show countdown
+      io.to(roomCode).emit('game:turnTimer', {
+        playerId: event.playerId,
+        timeoutAt: event.timeoutAt,
+      });
       break;
     }
 
@@ -285,6 +401,10 @@ function handleGameEvent(
 
     case 'settled':
       io.to(roomCode).emit('game:settled', event.data);
+      if (event.data.nextRound === null) {
+        recordCompletedGame(room, room.engine.getState(), event.data)
+          .catch((err) => logger.error({ err, roomCode }, 'Failed to record game history'));
+      }
       break;
   }
 }
@@ -320,6 +440,7 @@ function broadcastRoomState(io: Server, roomCode: string): void {
       isHost: pid === room.hostId,
     })),
     randomSeats: room.randomSeats,
+    settings: room.settings,
   });
 }
 
@@ -354,6 +475,23 @@ function findSocketId(io: Server, playerId: string): string | undefined {
 function sanitizeNickname(name: unknown): string {
   if (typeof name !== 'string') return '玩家';
   return name.trim().slice(0, 8) || '玩家';
+}
+
+function sanitizeSettings(settings: Partial<RoomSettings> | undefined): Partial<RoomSettings> {
+  const result: Partial<RoomSettings> = {};
+  if (settings?.totalRounds !== undefined &&
+      (ALLOWED_TOTAL_ROUNDS as readonly number[]).includes(settings.totalRounds)) {
+    result.totalRounds = settings.totalRounds;
+  }
+  if (settings?.actionTimeoutSeconds !== undefined &&
+      (ALLOWED_ACTION_TIMEOUT_SECONDS as readonly number[]).includes(settings.actionTimeoutSeconds)) {
+    result.actionTimeoutSeconds = settings.actionTimeoutSeconds;
+  }
+  if (settings?.botCount !== undefined &&
+      (ALLOWED_BOT_COUNTS as readonly number[]).includes(settings.botCount)) {
+    result.botCount = settings.botCount;
+  }
+  return result;
 }
 
 function buildShareUrl(roomCode: string): string {

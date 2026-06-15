@@ -1,37 +1,37 @@
-import React from 'react';
-import { CanActData, ChiOption } from '../../types';
+import { CanActData } from '../../types';
 import { useCountdown } from '../../hooks/useTimer';
 import './ActionPanel.css';
 
 interface ActionPanelProps {
   canAct: CanActData | null;
-  onDiscard: () => void;
   onChi: (combination: [string, string]) => void;
+  onChiOpen: () => void;
   onPong: () => void;
   onKong: (tileId?: string, kongType?: string) => void;
   onWin: () => void;
   onPass: () => void;
   isMyTurn: boolean;
-  selectedTileId: string | null;
   canSelfKong: boolean;
   kongTileId?: string;
+  canAddedKong?: boolean;
+  addedKongTileId?: string;
 }
 
 export default function ActionPanel({
   canAct,
-  onDiscard,
   onChi,
+  onChiOpen,
   onPong,
   onKong,
   onWin,
   onPass,
   isMyTurn,
-  selectedTileId,
   canSelfKong,
   kongTileId,
+  canAddedKong,
+  addedKongTileId,
 }: ActionPanelProps) {
-  const remaining = useCountdown(canAct?.deadline ?? null);
-  const [chiPickerOpen, setChiPickerOpen] = React.useState(false);
+  const remaining = useCountdown(canAct?.timeoutAt ?? null);
 
   if (!isMyTurn && !canAct) return null;
 
@@ -48,15 +48,7 @@ export default function ActionPanel({
       )}
 
       <div className="action-panel__buttons">
-        {isMyTurn && (
-          <button
-            className="action-btn action-btn--discard"
-            onClick={onDiscard}
-            disabled={!selectedTileId}
-          >
-            打牌
-          </button>
-        )}
+        {isMyTurn && <span className="action-panel__hint">点击手牌出牌</span>}
 
         {canAct?.actions.includes('win') && (
           <button className="action-btn action-btn--win" onClick={onWin}>
@@ -76,6 +68,12 @@ export default function ActionPanel({
           </button>
         )}
 
+        {canAddedKong && (
+          <button className="action-btn action-btn--kong" onClick={() => onKong(addedKongTileId, 'added')}>
+            加杠
+          </button>
+        )}
+
         {canAct?.actions.includes('pong') && (
           <button className="action-btn action-btn--pong" onClick={onPong}>
             碰
@@ -83,33 +81,18 @@ export default function ActionPanel({
         )}
 
         {canAct?.actions.includes('chi') && canAct.chiOptions && (
-          <div className="action-panel__chi-wrapper">
-            <button
-              className="action-btn action-btn--chi"
-              onClick={() => {
-                if (canAct.chiOptions?.length === 1) {
-                  onChi(canAct.chiOptions[0].combination);
-                } else {
-                  setChiPickerOpen(v => !v);
-                }
-              }}
-            >
-              吃
-            </button>
-            {chiPickerOpen && (
-              <div className="action-panel__chi-picker">
-                {canAct.chiOptions?.map((opt, i) => (
-                  <button
-                    key={i}
-                    className="action-btn action-btn--chi-opt"
-                    onClick={() => { setChiPickerOpen(false); onChi(opt.combination); }}
-                  >
-                    {opt.display}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <button
+            className="action-btn action-btn--chi"
+            onClick={() => {
+              if (canAct.chiOptions!.length === 1) {
+                onChi(canAct.chiOptions![0].combination);
+              } else {
+                onChiOpen();
+              }
+            }}
+          >
+            吃
+          </button>
         )}
 
         {canAct?.actions.includes('pass') && (

@@ -1,7 +1,10 @@
 .discard-pile {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 3px;
-  max-width: 200px;
-  align-content: flex-start;
+}
+
+.discard-pile__row {
+  display: flex;
+  gap: 3px;
 }

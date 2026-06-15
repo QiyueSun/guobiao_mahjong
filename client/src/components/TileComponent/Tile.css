@@ -1,10 +1,10 @@
 :root {
-  --tile-w-sm: 28px;
-  --tile-h-sm: 38px;
-  --tile-w-md: 38px;
-  --tile-h-md: 52px;
-  --tile-w-lg: 52px;
-  --tile-h-lg: 70px;
+  --tile-w-sm: 34px;
+  --tile-h-sm: 48px;
+  --tile-w-md: 46px;
+  --tile-h-md: 64px;
+  --tile-w-lg: 64px;
+  --tile-h-lg: 88px;
 }
 
 .tile {
@@ -18,6 +18,9 @@
   user-select: none;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
   flex-shrink: 0;
+  overflow: hidden;
+  padding: 1px;
+  position: relative;
 }
 
 .tile--sm  { width: var(--tile-w-sm);  height: var(--tile-h-sm); }
@@ -27,21 +30,42 @@
 .tile--horizontal.tile--sm  { width: var(--tile-h-sm); height: var(--tile-w-sm); }
 .tile--horizontal.tile--md  { width: var(--tile-h-md); height: var(--tile-w-md); }
 
-.tile__label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--tile-color, #2c3e50);
-  line-height: 1;
-  text-align: center;
-  white-space: nowrap;
+.tile__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
-.tile--sm .tile__label { font-size: 10px; }
-.tile--lg .tile__label { font-size: 18px; }
+/* Horizontal tiles: place a portrait image, absolutely centered, then rotate 90°.
+   The container (overflow:hidden) clips the layout overflow cleanly. */
+.tile--horizontal .tile__img {
+  position: absolute;
+  top:  calc((var(--tile-w) - var(--tile-h)) / 2);
+  left: calc((var(--tile-h) - var(--tile-w)) / 2);
+  width:  var(--tile-w);
+  height: var(--tile-h);
+  transform: rotate(90deg);
+  transform-origin: center;
+}
+
+.tile--horizontal.tile--sm {
+  --tile-w: var(--tile-w-sm);
+  --tile-h: var(--tile-h-sm);
+}
+.tile--horizontal.tile--md {
+  --tile-w: var(--tile-w-md);
+  --tile-h: var(--tile-h-md);
+}
+.tile--horizontal.tile--lg {
+  --tile-w: var(--tile-w-lg);
+  --tile-h: var(--tile-h-lg);
+}
 
 .tile--back {
-  background: linear-gradient(135deg, #1a6b3c 25%, #155a32 75%);
-  border-color: #0e4024;
+  background: #2a5298;
+  border-color: #1a3a6e;
+  padding: 2px;
 }
 
 .tile--clickable { cursor: pointer; }
@@ -59,15 +83,33 @@
 
 .tile--dimmed { opacity: 0.4; }
 
-.tile--newest {
-  border-color: #3498db;
-  background: #eaf6ff;
+.tile--highlighted::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(230, 126, 34, 0.45);
+  border-radius: 3px;
+  pointer-events: none;
 }
 
-.tile--flower .tile__label { color: #8e44ad; }
+.tile--newest {
+  border-color: #3498db;
+}
 
 @keyframes slideIn {
   from { transform: translateY(20px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
 .tile--newest { animation: slideIn 0.25s ease; }
+
+/* Scale all tiles down on short viewports so the board fits without clipping */
+@media (max-height: 650px) {
+  :root {
+    --tile-w-sm: 26px;
+    --tile-h-sm: 36px;
+    --tile-w-md: 36px;
+    --tile-h-md: 50px;
+    --tile-w-lg: 54px;
+    --tile-h-lg: 74px;
+  }
+}

@@ -1,22 +1,23 @@
 import { v4 as uuidv4 } from 'uuid';
 import {
   GameState, PlayerState, Tile, Meld, Wind, PlayerId,
-  PendingAction, SettlementData, FanResult, WinContext,
+  PendingAction, SettlementData, FanResult, WinContext, RoomSettings,
 } from '../types';
 import { Deck } from './Deck';
 import { calcScoreDeltas } from './ScoreCalculator';
 import { calculateFan } from '../fan/FanCalculator';
 import {
-  isWinnable, getTenpaiTiles, isFlower, sortTiles, sameTile,
+  isWinnable, getTenpaiTiles, isFlower, sortTiles, sameTile, tileKey,
 } from '../fan/winChecker';
 import { logger } from '../logger';
+import { DEFAULT_ROOM_SETTINGS } from '../rooms/roomSettings';
 
 const WINDS: Wind[] = ['east', 'south', 'west', 'north'];
-const ACTION_TIMEOUT = parseInt(process.env.ACTION_TIMEOUT_SECONDS ?? '20', 10) * 1000;
+const AI_THINK_MS = 700;
 
 export type GameEvent =
-  | { type: 'drawTile'; playerId: PlayerId; tile: Tile; isFlower: boolean; flowerChain: Tile[]; wallRemaining: number; canWin: boolean; fanHint?: FanResult }
-  | { type: 'action'; playerId: PlayerId; action: string; tile?: Tile; meld?: Meld; flowerRevealed?: Tile[] }
+  | { type: 'drawTile'; playerId: PlayerId; tile: Tile; isFlower: boolean; flowerChain: Tile[]; wallRemaining: number; canWin: boolean; fanHint?: FanResult; timeoutAt: number }
+  | { type: 'action'; playerId: PlayerId; action: string; tile?: Tile; meld?: Meld; flowerRevealed?: Tile[]; timeoutAt?: number }
   | { type: 'canAct'; playerId: PlayerId; actions: PendingAction['availableActions']; chiOptions?: Array<{combination: [string,string]; display: string}>; timeoutAt: number }
   | { type: 'fanHint'; playerId: PlayerId; fanHint: FanResult }
   | { type: 'settled'; data: SettlementData }
@@ -26,8 +27,13 @@ export class GameEngine {
   private state: GameState;
   private deck!: Deck;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private currentTimer: { playerId: PlayerId; timeoutAt: number } | null = null;
+  private timerCallback: (() => Promise<void>) | null = null;
   private onEvent: (e: GameEvent) => void;
   private roomCode: string;
+  private actionTimeout: number;
+  private maxRounds: number;
+  private lastSettlement: SettlementData | null = null;
 
   constructor(
     playerIds: PlayerId[],
@@ -35,9 +41,12 @@ export class GameEngine {
     roomCode: string,
     onEvent: (e: GameEvent) => void,
     randomSeats = false,
+    settings: RoomSettings = DEFAULT_ROOM_SETTINGS,
   ) {
     this.roomCode = roomCode;
     this.onEvent = onEvent;
+    this.actionTimeout = settings.actionTimeoutSeconds * 1000;
+    this.maxRounds = settings.totalRounds;
 
     const order = randomSeats ? shuffle([...playerIds]) : [...playerIds];
     const players: Record<PlayerId, PlayerState> = {};
@@ -64,16 +73,16 @@ export class GameEngine {
 
     this.state = {
       phase: 'dealing',
-      round: { wind: 'east', roundIndex: 1, totalRound: 1 },
+      round: { wind: 'east', roundIndex: 1, totalRound: 1, maxRounds: this.maxRounds },
       dealer: order[0],
       currentTurn: order[0],
-      wall: { remaining: 0, deadWall: 0 },
+      wall: { remaining: 0 },
       players,
       playerOrder: order,
       lastDiscard: null,
       pendingActions: [],
       isLastTile: false,
-      lastDrawFromDeadWall: false,
+      lastDrawIsReplacement: false,
     };
   }
 
@@ -87,6 +96,7 @@ export class GameEngine {
     this.state.lastDiscard = null;
     this.state.pendingActions = [];
     this.state.isLastTile = false;
+    this.lastSettlement = null;
 
     for (const pid of this.state.playerOrder) {
       const p = this.state.players[pid];
@@ -125,12 +135,12 @@ export class GameEngine {
 
   // ── Draw tile ───────────────────────────────────────────────────────────────
 
-  private async drawTile(playerId: PlayerId, fromDeadWall: boolean): Promise<void> {
+  private async drawTile(playerId: PlayerId, isReplacement: boolean): Promise<void> {
     this.state.phase = 'player_turn';
     this.state.currentTurn = playerId;
     this.clearTimer();
 
-    let tile = fromDeadWall ? this.deck.drawFromDeadWall() : this.deck.draw();
+    let tile = isReplacement ? this.deck.drawReplacement() : this.deck.draw();
     if (!tile) {
       await this.handleExhausted();
       return;
@@ -143,7 +153,7 @@ export class GameEngine {
       flowerChain.push(tile);
       this.state.players[playerId].flowers.push(tile);
       this.updateFlowerBonus(playerId);
-      tile = this.deck.drawFromDeadWall();
+      tile = this.deck.drawReplacement();
       if (!tile) {
         await this.handleExhausted();
         return;
@@ -152,9 +162,10 @@ export class GameEngine {
 
     this.state.players[playerId].hand.push(tile);
     this.state.players[playerId].handCount = this.state.players[playerId].hand.length;
+    this.state.players[playerId].isTenpai = false;
     this.updateWallCounts();
     this.state.isLastTile = this.deck.isLastTile();
-    this.state.lastDrawFromDeadWall = fromDeadWall;
+    this.state.lastDrawIsReplacement = isReplacement;
 
     const canWin = isWinnable(this.state.players[playerId].hand, this.state.players[playerId].melds);
     let fanHint: FanResult | undefined;
@@ -163,6 +174,11 @@ export class GameEngine {
       const ctx = this.buildWinContext(playerId, tile, 'self');
       fanHint = calculateFan(ctx);
     }
+
+    const timeoutAt = Date.now() + this.actionTimeout;
+
+    // stateUpdate first so clients clear stale timers before the new turnTimer arrives
+    this.emit({ type: 'stateUpdate' });
 
     this.emit({
       type: 'drawTile',
@@ -173,18 +189,21 @@ export class GameEngine {
       wallRemaining: this.deck.remaining,
       canWin,
       fanHint,
+      timeoutAt,
     });
 
     if (flowerChain.length > 0) {
       this.emit({ type: 'action', playerId, action: 'flower', flowerRevealed: flowerChain });
     }
 
-    this.emit({ type: 'stateUpdate' });
-
     // Set timeout for player action
-    this.startTimer(ACTION_TIMEOUT, async () => {
+    this.startTimer(this.actionTimeout, async () => {
       await this.autoDiscard(playerId);
-    });
+    }, { playerId, timeoutAt });
+
+    if (this.state.players[playerId].isAI) {
+      this.scheduleAiAction(() => this.runAiTurn(playerId));
+    }
   }
 
   // ── Player actions ──────────────────────────────────────────────────────────
@@ -202,6 +221,7 @@ export class GameEngine {
     const [tile] = player.hand.splice(idx, 1);
     player.handCount = player.hand.length;
     player.discards.push(tile);
+    player.isTenpai = getTenpaiTiles(player.hand, player.melds).length > 0;
     this.state.lastDiscard = { playerId, tile };
 
     this.emit({ type: 'action', playerId, action: 'discard', tile });
@@ -232,16 +252,18 @@ export class GameEngine {
       claimedFrom: this.getRelativePosition(this.state.lastDiscard!.playerId, playerId),
     };
     player.melds.push(meld);
+    this.removeFromDiscards(this.state.lastDiscard!.playerId, discarded);
 
     this.state.phase = 'player_turn';
     this.state.currentTurn = playerId;
 
-    this.emit({ type: 'action', playerId, action: 'chi', tile: discarded, meld });
+    const timeoutAt = Date.now() + this.actionTimeout;
+    this.emit({ type: 'action', playerId, action: 'chi', tile: discarded, meld, timeoutAt });
     this.emit({ type: 'stateUpdate' });
 
-    this.startTimer(ACTION_TIMEOUT, async () => {
+    this.startTimer(this.actionTimeout, async () => {
       await this.autoDiscard(playerId);
-    });
+    }, { playerId, timeoutAt });
   }
 
   async handlePong(playerId: PlayerId): Promise<void> {
@@ -265,16 +287,18 @@ export class GameEngine {
       claimedFrom: this.getRelativePosition(this.state.lastDiscard!.playerId, playerId),
     };
     player.melds.push(meld);
+    this.removeFromDiscards(this.state.lastDiscard!.playerId, discarded);
 
     this.state.phase = 'player_turn';
     this.state.currentTurn = playerId;
 
-    this.emit({ type: 'action', playerId, action: 'pong', tile: discarded, meld });
+    const timeoutAt = Date.now() + this.actionTimeout;
+    this.emit({ type: 'action', playerId, action: 'pong', tile: discarded, meld, timeoutAt });
     this.emit({ type: 'stateUpdate' });
 
-    this.startTimer(ACTION_TIMEOUT, async () => {
+    this.startTimer(this.actionTimeout, async () => {
       await this.autoDiscard(playerId);
-    });
+    }, { playerId, timeoutAt });
   }
 
   async handleKong(playerId: PlayerId, tileId: string, kongType: string): Promise<void> {
@@ -313,6 +337,7 @@ export class GameEngine {
         claimedFrom: this.getRelativePosition(this.state.lastDiscard!.playerId, playerId),
       };
       player.melds.push(meld);
+      this.removeFromDiscards(this.state.lastDiscard!.playerId, discarded);
       this.emit({ type: 'action', playerId, action: 'kong_open', meld });
       await this.drawTile(playerId, true);
 
@@ -400,6 +425,7 @@ export class GameEngine {
     };
 
     state.phase = 'settled';
+    this.lastSettlement = settlement;
     this.emit({ type: 'settled', data: settlement });
     this.emit({ type: 'stateUpdate' });
   }
@@ -462,7 +488,7 @@ export class GameEngine {
 
       if (actions.length > 0) {
         actions.push('pass');
-        const deadline = Date.now() + ACTION_TIMEOUT;
+        const deadline = Date.now() + this.actionTimeout;
         this.state.pendingActions.push({
           playerId: pid,
           availableActions: actions,
@@ -471,6 +497,10 @@ export class GameEngine {
           responded: false,
         });
         this.emit({ type: 'canAct', playerId: pid, actions, chiOptions, timeoutAt: deadline });
+
+        if (player.isAI) {
+          this.scheduleAiAction(() => this.runAiResponse(pid));
+        }
       }
     }
 
@@ -479,9 +509,10 @@ export class GameEngine {
       return;
     }
 
-    this.startTimer(ACTION_TIMEOUT, async () => {
+    const last = this.state.pendingActions[this.state.pendingActions.length - 1];
+    this.startTimer(this.actionTimeout, async () => {
       await this.resolveResponses();
-    });
+    }, { playerId: last.playerId, timeoutAt: last.deadline });
   }
 
   private async resolveResponses(): Promise<void> {
@@ -562,6 +593,7 @@ export class GameEngine {
       nextRound: this.computeNextRound(false, true),
     };
 
+    this.lastSettlement = settlement;
     this.emit({ type: 'settled', data: settlement });
     this.emit({ type: 'stateUpdate' });
   }
@@ -574,7 +606,7 @@ export class GameEngine {
   ): SettlementData['nextRound'] {
     const { round, dealer } = this.state;
 
-    if (round.totalRound >= 16) return null;
+    if (round.totalRound >= this.maxRounds) return null;
 
     // Dealer wins or exhausted (dealer连庄): same wind, same round index
     if (dealerWon || isExhausted) {
@@ -582,6 +614,7 @@ export class GameEngine {
         wind: round.wind,
         roundIndex: round.roundIndex,
         totalRound: round.totalRound + 1,
+        maxRounds: this.maxRounds,
         dealer,
       };
     }
@@ -604,6 +637,7 @@ export class GameEngine {
       wind: nextWind,
       roundIndex: nextRoundIndex,
       totalRound: round.totalRound + 1,
+      maxRounds: this.maxRounds,
       dealer: nextDealer,
     };
   }
@@ -613,6 +647,7 @@ export class GameEngine {
       wind: next.wind,
       roundIndex: next.roundIndex,
       totalRound: next.totalRound,
+      maxRounds: this.maxRounds,
     };
     this.state.dealer = next.dealer;
 
@@ -640,6 +675,90 @@ export class GameEngine {
     }
   }
 
+  // Bot seats act after a short "thinking" delay instead of waiting out the full action timer.
+  // Stale callbacks are harmless: handle*() guard on current phase/turn/pendingActions.
+  private scheduleAiAction(fn: () => Promise<void>): void {
+    setTimeout(() => {
+      fn().catch(e => logger.error({ e }, 'AI action error'));
+    }, AI_THINK_MS);
+  }
+
+  private async runAiTurn(playerId: PlayerId): Promise<void> {
+    if (this.state.phase !== 'player_turn' || this.state.currentTurn !== playerId) return;
+    const player = this.state.players[playerId];
+    if (player.hand.length === 0) return;
+
+    if (isWinnable(player.hand, player.melds)) {
+      try {
+        await this.handleWin(playerId);
+        return;
+      } catch {
+        // insufficient fan — fall through to discard
+      }
+    }
+
+    const tile = player.hand[player.hand.length - 1];
+    await this.handleDiscard(playerId, tile.id);
+  }
+
+  private async runAiResponse(playerId: PlayerId): Promise<void> {
+    const pending = this.state.pendingActions.find(a => a.playerId === playerId && !a.responded);
+    if (!pending) return;
+
+    if (pending.availableActions.includes('win')) {
+      try {
+        await this.handleWin(playerId);
+        return;
+      } catch {
+        // fall through to pass
+      }
+    }
+    await this.handlePass(playerId);
+  }
+
+  // ── Tenpai info ───────────────────────────────────────────────────────────────
+
+  computeTenpaiInfo(playerId: PlayerId): Array<{ tile: Tile; fanTotal: number; remaining: number }> {
+    const player = this.state.players[playerId];
+    if (!player || player.hand.length !== 13 - player.melds.length * 3) return [];
+
+    const tenpaiTiles = getTenpaiTiles(player.hand, player.melds);
+    if (tenpaiTiles.length === 0) return [];
+
+    const visibleCounts = this.computeVisibleTileCounts(playerId);
+
+    return tenpaiTiles.map(tile => {
+      const ctx = this.buildWinContext(playerId, tile, 'discard');
+      const fanResult = calculateFan(ctx);
+      const key = tileKey(tile);
+      const seen = visibleCounts.get(key) ?? 0;
+      const remaining = Math.max(0, 4 - seen);
+      return { tile, fanTotal: fanResult.total, remaining };
+    });
+  }
+
+  private computeVisibleTileCounts(playerId: PlayerId): Map<string, number> {
+    const counts = new Map<string, number>();
+    const addTile = (t: Tile) => {
+      if (t.suit === 'flower') return;
+      const k = tileKey(t);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    };
+    for (const pid of this.state.playerOrder) {
+      const p = this.state.players[pid];
+      if (pid === playerId) {
+        for (const t of p.hand) addTile(t);
+        for (const m of p.melds) for (const t of m.tiles) addTile(t);
+      } else {
+        for (const t of p.discards) addTile(t);
+        for (const m of p.melds) {
+          if (m.type !== 'kong_closed') for (const t of m.tiles) addTile(t);
+        }
+      }
+    }
+    return counts;
+  }
+
   // ── Utility ──────────────────────────────────────────────────────────────────
 
   private buildWinContext(playerId: PlayerId, winTile: Tile, winType: 'self' | 'discard'): WinContext {
@@ -656,9 +775,10 @@ export class GameEngine {
       roundWind: this.state.round.wind,
       seatWind: player.position,
       isLastTile: this.state.isLastTile,
-      isAfterKong: this.state.lastDrawFromDeadWall,
+      isAfterKong: this.state.lastDrawIsReplacement,
       isRobbingKong: false,
       flowers: player.flowers,
+      visibleTileCounts: this.computeVisibleTileCounts(playerId),
     };
   }
 
@@ -705,6 +825,13 @@ export class GameEngine {
     );
   }
 
+  // Remove a claimed discard from the discarder's discard pile (it now belongs to the claimer's meld)
+  private removeFromDiscards(discarderId: PlayerId, tile: Tile): void {
+    const discarder = this.state.players[discarderId];
+    const idx = discarder.discards.findIndex(t => t.id === tile.id);
+    if (idx !== -1) discarder.discards.splice(idx, 1);
+  }
+
   private getNextPlayerIdx(currentIdx: number): number {
     return (currentIdx + 1) % this.state.playerOrder.length;
   }
@@ -719,11 +846,11 @@ export class GameEngine {
   }
 
   private replenishFlower(playerId: PlayerId): void {
-    let tile = this.deck.drawFromDeadWall();
+    let tile = this.deck.drawReplacement();
     while (tile && isFlower(tile)) {
       this.state.players[playerId].flowers.push(tile);
       this.updateFlowerBonus(playerId);
-      tile = this.deck.drawFromDeadWall();
+      tile = this.deck.drawReplacement();
     }
     if (tile) {
       this.state.players[playerId].hand.push(tile);
@@ -742,11 +869,12 @@ export class GameEngine {
 
   private updateWallCounts(): void {
     this.state.wall.remaining = this.deck.remaining;
-    this.state.wall.deadWall = this.deck.deadWallCount;
   }
 
-  private startTimer(ms: number, cb: () => Promise<void>): void {
+  private startTimer(ms: number, cb: () => Promise<void>, info: { playerId: PlayerId; timeoutAt: number } | null = null): void {
     this.clearTimer();
+    this.currentTimer = info;
+    this.timerCallback = cb;
     this.timer = setTimeout(() => {
       cb().catch(e => logger.error({ e }, 'timer callback error'));
     }, ms);
@@ -757,6 +885,30 @@ export class GameEngine {
       clearTimeout(this.timer);
       this.timer = null;
     }
+    this.currentTimer = null;
+    this.timerCallback = null;
+  }
+
+  // Current outstanding action deadline, used to restore the countdown for clients that reconnect mid-timer
+  getCurrentTimer(): { playerId: PlayerId; timeoutAt: number } | null {
+    return this.currentTimer;
+  }
+
+  getLastSettlement(): SettlementData | null {
+    return this.lastSettlement;
+  }
+
+  // Extend the currently running action timer by extraMs, rescheduling its callback. Returns the new timer info, or null if no timer is active.
+  extendCurrentTimer(extraMs: number): { playerId: PlayerId; timeoutAt: number } | null {
+    if (!this.currentTimer || !this.timer || !this.timerCallback) return null;
+    const cb = this.timerCallback;
+    const info = { playerId: this.currentTimer.playerId, timeoutAt: this.currentTimer.timeoutAt + extraMs };
+    clearTimeout(this.timer);
+    this.currentTimer = info;
+    this.timer = setTimeout(() => {
+      cb().catch(e => logger.error({ e }, 'timer callback error'));
+    }, Math.max(info.timeoutAt - Date.now(), 0));
+    return info;
   }
 
   private emit(event: GameEvent): void {

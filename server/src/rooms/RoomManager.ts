@@ -1,5 +1,5 @@
 import { Room } from './Room';
-import { PlayerId } from '../types';
+import { PlayerId, RoomSettings } from '../types';
 import { logger } from '../logger';
 
 const ROOM_IDLE_TIMEOUT_MS =
@@ -9,9 +9,9 @@ class RoomManager {
   private rooms = new Map<string, Room>();
   private idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-  createRoom(hostId: PlayerId, nickname: string): Room {
+  createRoom(hostId: PlayerId, nickname: string, settings?: Partial<RoomSettings>): Room {
     const code = generateCode();
-    const room = new Room(code, hostId, nickname);
+    const room = new Room(code, hostId, nickname, settings);
     this.rooms.set(code, room);
     this.resetIdleTimer(code);
     logger.info({ code, hostId }, 'Room created');

@@ -1,15 +1,15 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 COPY . .
-RUN npm run build
+RUN npm run build && cp -r src/db/migrations dist/db/migrations
 
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/dist ./dist
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 EXPOSE 3001
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "node dist/db/migrate.js && node dist/index.js"]

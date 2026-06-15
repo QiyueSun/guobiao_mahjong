@@ -67,19 +67,25 @@ export interface GameState {
     wind: Wind;
     roundIndex: number;
     totalRound: number;
+    maxRounds: number;
   };
   dealer: PlayerId;
   currentTurn: PlayerId;
   wall: {
     remaining: number;
-    deadWall: number;
   };
   players: Record<PlayerId, PlayerState>;
   playerOrder: PlayerId[];
   lastDiscard: { playerId: PlayerId; tile: Tile } | null;
   pendingActions: PendingAction[];
   isLastTile: boolean;
-  lastDrawFromDeadWall: boolean;
+  lastDrawIsReplacement: boolean;
+}
+
+export interface RoomSettings {
+  totalRounds: number;
+  actionTimeoutSeconds: number;
+  botCount: number;
 }
 
 export interface RoomMeta {
@@ -89,6 +95,7 @@ export interface RoomMeta {
   hostId: PlayerId;
   createdAt: number;
   randomSeats: boolean;
+  settings: RoomSettings;
 }
 
 export interface SessionData {
@@ -101,6 +108,7 @@ export interface SessionData {
 export interface FanEntry {
   name: string;
   value: number;
+  count?: number;
 }
 
 export interface FlowerBonusEntry {
@@ -129,6 +137,7 @@ export interface SettlementData {
     wind: Wind;
     roundIndex: number;
     totalRound: number;
+    maxRounds: number;
     dealer: string;
   } | null;
 }
@@ -147,6 +156,7 @@ export interface WinContext {
   isRobbingKong: boolean;
   flowers: Tile[];
   isTenpaiStart?: boolean;
+  visibleTileCounts: Map<string, number>;
 }
 
 // Decomposed hand for fan checking

@@ -1,11 +1,9 @@
-import { Tile, Suit } from '../types';
-
-const DEAD_WALL_SIZE = 14;
+import { Tile } from '../types';
 
 export class Deck {
-  private mainWall: Tile[];
-  private deadWall: Tile[];
-  private drawPtr = 0;
+  private wall: Tile[];
+  private frontPtr = 0;
+  private backPtr: number;
 
   constructor(withFlowers = true) {
     const all: Tile[] = [];
@@ -38,25 +36,24 @@ export class Deck {
 
     shuffle(all);
 
-    this.deadWall = all.splice(all.length - DEAD_WALL_SIZE);
-    this.mainWall = all;
+    this.wall = all;
+    this.backPtr = all.length;
   }
 
+  /** Normal turn draw, from the front of the wall. */
   draw(): Tile | null {
-    if (this.drawPtr >= this.mainWall.length) return null;
-    return this.mainWall[this.drawPtr++];
+    if (this.frontPtr >= this.backPtr) return null;
+    return this.wall[this.frontPtr++];
   }
 
-  drawFromDeadWall(): Tile | null {
-    return this.deadWall.pop() ?? null;
+  /** Replacement draw for a kong or a dealt/drawn flower, from the back of the wall. */
+  drawReplacement(): Tile | null {
+    if (this.frontPtr >= this.backPtr) return null;
+    return this.wall[--this.backPtr];
   }
 
   get remaining(): number {
-    return this.mainWall.length - this.drawPtr;
-  }
-
-  get deadWallCount(): number {
-    return this.deadWall.length;
+    return this.backPtr - this.frontPtr;
   }
 
   isLastTile(): boolean {

@@ -74,6 +74,17 @@
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: background 0.15s, opacity 0.15s;
 }
-.settlement__btn:hover { opacity: 0.9; }
+.settlement__btn:hover:not(:disabled) { opacity: 0.9; }
+.settlement__btn:disabled { cursor: default; }
+.settlement__btn--ready {
+  background: #2c3e50;
+  color: rgba(255,255,255,0.5);
+}
+
+.settlement__ready-count {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.45);
+}

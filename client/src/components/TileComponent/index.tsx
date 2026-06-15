@@ -1,18 +1,24 @@
 import React from 'react';
 import { Tile } from '../../types';
-import { tileLabel, tileColor } from '../../utils/tiles';
 import './Tile.css';
+
+function tileImagePath(tile: Tile): string {
+  return `/tiles/${tile.suit}${tile.value}.png`;
+}
 
 interface TileProps {
   tile: Tile;
   selected?: boolean;
   onClick?: () => void;
   onDoubleClick?: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
   size?: 'sm' | 'md' | 'lg';
   faceDown?: boolean;
   dimmed?: boolean;
   newest?: boolean;
   horizontal?: boolean;
+  highlighted?: boolean;
 }
 
 export default function TileComponent({
@@ -20,23 +26,25 @@ export default function TileComponent({
   selected,
   onClick,
   onDoubleClick,
+  onMouseEnter,
+  onMouseLeave,
   size = 'md',
   faceDown,
   dimmed,
   newest,
   horizontal,
+  highlighted,
 }: TileProps) {
   if (faceDown) {
     return (
-      <div
-        className={`tile tile--back tile--${size} ${horizontal ? 'tile--horizontal' : ''}`}
-      />
+      <div className={`tile tile--back tile--${size} ${horizontal ? 'tile--horizontal' : ''}`}>
+        <img src="/tiles/back.png" className="tile__img" alt="tile back" />
+      </div>
     );
   }
 
-  const label = tileLabel(tile);
-  const color = tileColor(tile);
   const isFlower = tile.suit === 'flower';
+  const src = tileImagePath(tile);
 
   return (
     <div
@@ -49,12 +57,14 @@ export default function TileComponent({
         horizontal ? 'tile--horizontal' : '',
         isFlower ? 'tile--flower' : '',
         onClick ? 'tile--clickable' : '',
+        highlighted ? 'tile--highlighted' : '',
       ].filter(Boolean).join(' ')}
-      style={{ '--tile-color': color } as React.CSSProperties}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
-      <span className="tile__label">{label}</span>
+      <img src={src} className="tile__img" alt={`${tile.suit}${tile.value}`} />
     </div>
   );
 }

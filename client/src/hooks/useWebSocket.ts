@@ -3,14 +3,22 @@ import { io, Socket } from 'socket.io-client';
 import { useGameStore } from '../store/gameStore';
 import {
   GameState, RoomState, DrawTileData, ActionBroadcastData,
-  CanActData, FanResult, SettlementData,
+  CanActData, FanResult, SettlementData, TenpaiTileInfo, AuthUser,
 } from '../types';
+import { playDiscardSound, playMeldSound, playKongSound, playFlowerSound, playWinSound } from '../utils/sounds';
 
 let socket: Socket | null = null;
 
 export function useWebSocket() {
   const store = useGameStore();
   const seqRef = useRef(0);
+
+  useEffect(() => {
+    fetch('/api/v1/auth/me', { credentials: 'include' })
+      .then(res => (res.ok ? res.json() : null))
+      .then((data: { user: AuthUser } | null) => store.setAuthUser(data?.user ?? null))
+      .catch(() => store.setAuthUser(null));
+  }, []);
 
   useEffect(() => {
     if (socket) return;
@@ -56,6 +64,15 @@ export function useWebSocket() {
 
     socket.on('game:action', (data: ActionBroadcastData) => {
       store.applyActionBroadcast(data);
+      switch (data.action) {
+        case 'discard': playDiscardSound(); break;
+        case 'chi':
+        case 'pong': playMeldSound(); break;
+        case 'kong_open':
+        case 'kong_closed':
+        case 'kong_added': playKongSound(); break;
+        case 'flower': playFlowerSound(); break;
+      }
     });
 
     socket.on('game:canAct', (data: CanActData) => {
@@ -66,12 +83,25 @@ export function useWebSocket() {
       store.setFanHint(data.fanHint);
     });
 
+    socket.on('game:tenpaiInfo', (data: { tiles: TenpaiTileInfo[] }) => {
+      store.setTenpaiInfo(data.tiles);
+    });
+
     socket.on('game:settled', (data: SettlementData) => {
       store.applySettlement(data);
+      if (data.winner) playWinSound();
+    });
+
+    socket.on('game:turnTimer', (data: { playerId: string; timeoutAt: number }) => {
+      store.setTurnTimer(data);
     });
 
     socket.on('game:error', (err: { code: string; message: string }) => {
       console.error('Game error:', err);
+    });
+
+    socket.on('room:next_ready_update', (data: { count: number; total: number }) => {
+      store.setNextReadyCount(data.count);
     });
 
     return () => {

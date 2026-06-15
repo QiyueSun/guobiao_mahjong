@@ -55,10 +55,11 @@ export interface GameState {
     wind: Wind;
     roundIndex: number;
     totalRound: number;
+    maxRounds: number;
   };
   dealer: PlayerId;
   currentTurn: PlayerId;
-  wall: { remaining: number; deadWall: number };
+  wall: { remaining: number };
   players: Record<PlayerId, PlayerState>;
   playerOrder: PlayerId[];
   lastDiscard: { playerId: PlayerId; tile: Tile } | null;
@@ -97,6 +98,7 @@ export interface SettlementData {
     wind: Wind;
     roundIndex: number;
     totalRound: number;
+    maxRounds: number;
     dealer: string;
   } | null;
 }
@@ -108,12 +110,19 @@ export interface RoomPlayer {
   isHost: boolean;
 }
 
+export interface RoomSettings {
+  totalRounds: number;
+  actionTimeoutSeconds: number;
+  botCount: number;
+}
+
 export interface RoomState {
   code: string;
   phase: 'waiting' | 'playing' | 'settled';
   hostId: string;
   players: RoomPlayer[];
   randomSeats: boolean;
+  settings: RoomSettings;
 }
 
 export interface DrawTileData {
@@ -137,4 +146,28 @@ export interface CanActData {
   actions: Array<'chi' | 'pong' | 'kong' | 'win' | 'pass'>;
   chiOptions?: ChiOption[];
   timeoutAt: number;
+}
+
+export interface TenpaiTileInfo {
+  tile: Tile;
+  fanTotal: number;
+  remaining: number;
+}
+
+export interface AuthUser {
+  id: string;
+  name: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+}
+
+export interface GameHistoryEntry {
+  gameId: string;
+  roomCode: string;
+  startedAt: string;
+  endedAt: string;
+  totalRoundsPlayed: number;
+  maxRounds: number;
+  finalScore: number;
+  rank: number;
 }

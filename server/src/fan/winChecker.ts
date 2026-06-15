@@ -133,16 +133,18 @@ function findStandardDecomps(
   // tiles.length should be needed*3 + 2
   if (tiles.length !== needed * 3 + 2) return [];
 
-  const first = tiles[0];
-
-  // Try pair with first tile (only when this is the last group before pair)
-  // We try the pair at any position by trying to match the first tile as part of pair
-  // Check if we can make a pair with the first tile
-  const pairIdx = tiles.findIndex((t, i) => i > 0 && sameTile(t, first));
-  if (pairIdx !== -1) {
-    const rest = tiles.filter((_, i) => i !== 0 && i !== pairIdx);
-    const pairGroup: Group = { type: 'pair', tiles: [first, tiles[pairIdx]], concealed: true };
-    const meldDecomps = findAllMelds(rest, needed, current);
+  // Try every unique tile as the pair candidate
+  const triedPairs = new Set<string>();
+  for (let i = 0; i < tiles.length; i++) {
+    const pairTile = tiles[i];
+    const key = tileKey(pairTile);
+    if (triedPairs.has(key)) continue;
+    const pairIdx = tiles.findIndex((t, j) => j > i && sameTile(t, pairTile));
+    if (pairIdx === -1) continue;
+    triedPairs.add(key);
+    const rest = tiles.filter((_, j) => j !== i && j !== pairIdx);
+    const pairGroup: Group = { type: 'pair', tiles: [pairTile, tiles[pairIdx]], concealed: true };
+    const meldDecomps = findAllMelds(rest, needed, []);
     for (const meldSet of meldDecomps) {
       results.push([pairGroup, ...meldSet]);
     }
@@ -271,8 +273,8 @@ export function isKnittedHand(tiles: Tile[]): boolean {
   const allHonorKeys = ['wind:1','wind:2','wind:3','wind:4','dragon:1','dragon:2','dragon:3'];
   if (!allHonorKeys.every(k => honorSet.has(k))) return false;
 
-  // Remaining 7 number tiles must form three non-consecutive sequences across suits
-  // Pattern: each suit contributes tiles from {1,4,7} or {2,5,8} or {3,6,9}
+  // Remaining 7 number tiles: each suit uses one arithmetic pattern {1,4,7}/{2,5,8}/{3,6,9};
+  // suits may contribute partial sets (e.g. only 1 tile from its pattern).
   const patterns = [
     [1, 4, 7], [2, 5, 8], [3, 6, 9],
   ];
@@ -282,12 +284,13 @@ export function isKnittedHand(tiles: Tile[]): boolean {
     let match = true;
     for (let s = 0; s < 3; s++) {
       const suit = suits[s];
-      const expected = perm[s];
-      const suitTiles = numbers.filter(t => t.suit === suit).map(t => t.value).sort((a,b)=>a-b);
-      if (suitTiles.length !== expected.length) { match = false; break; }
-      if (!expected.every((v, i) => v === suitTiles[i])) { match = false; break; }
+      const allowed = new Set(perm[s]);
+      const suitValues = numbers.filter(t => t.suit === suit).map(t => t.value);
+      // All tiles in this suit must come from the assigned pattern; no duplicates within suit
+      if (new Set(suitValues).size !== suitValues.length) { match = false; break; }
+      if (!suitValues.every(v => allowed.has(v))) { match = false; break; }
     }
-    if (match && numbers.length === 7) return true;
+    if (match) return true;
   }
 
   return false;

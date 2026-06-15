@@ -1,12 +1,35 @@
 .board {
+  position: relative;
   width: 100vw;
   height: 100vh;
   background: radial-gradient(ellipse at center, #1c5c35 0%, #0d3320 100%);
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: 80px 1fr 180px;
   grid-template-columns: 1fr;
   overflow: hidden;
   font-family: 'Noto Sans SC', sans-serif;
+}
+
+/* Floating turn timers — positioned over the board, don't affect layout */
+.board__floating-timer {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+}
+.board__floating-timer--top {
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.board__floating-timer--left {
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+}
+.board__floating-timer--right {
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
 }
 
 .board-loading {
@@ -19,21 +42,23 @@
   background: #0d3320;
 }
 
-/* Top player */
+/* ── Top player ────────────────────────────────────────────────────────── */
 .board__player--top {
-  padding: 8px 20px 0;
+  padding: 4px 20px 0;
   display: flex;
   justify-content: center;
+  overflow: hidden;
 }
 
-/* Middle row */
+/* ── Middle row ─────────────────────────────────────────────────────────── */
 .board__middle {
   display: grid;
-  grid-template-columns: 140px 1fr 140px;
-  gap: 8px;
-  padding: 8px;
+  grid-template-columns: 110px 1fr 110px;
+  gap: 4px;
+  padding: 4px;
   min-height: 0;
-  overflow: hidden;
+  /* overflow: visible so rotated discard piles aren't clipped */
+  overflow: visible;
 }
 
 .board__player--left,
@@ -43,19 +68,42 @@
   justify-content: center;
 }
 
-/* Center area */
+/* ── Center board (牌河) ─────────────────────────────────────────────────── */
 .board__center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
+  /* Fixed discard-area footprint: 6 tiles by 4 rows (top/bottom orientation) */
+  --discard-w: calc(6 * var(--tile-w-sm) + 5 * 3px);
+  --discard-h: calc(4 * var(--tile-h-sm) + 3 * 3px);
+  display: grid;
+  /* top-d and bot-d span all 3 columns so they stay centred over board__center-info */
+  grid-template-areas:
+    "top-d  top-d  top-d"
+    "left-d info   right-d"
+    "bot-d  bot-d  bot-d";
+  /* Side columns sized to the (transposed) discard-area footprint, so the centre cell is square */
+  grid-template-columns: var(--discard-h) 1fr var(--discard-h);
+  grid-template-rows: var(--discard-h) 1fr var(--discard-h);
+  align-items: stretch;
+  justify-items: center;
+  gap: 4px;
   padding: 8px;
   background: rgba(0,0,0,0.18);
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.05);
+  min-height: 0;
+  /* Square: size from the available row height, capped to the column width */
+  aspect-ratio: 1;
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  justify-self: center;
 }
 
 .board__center-info {
+  grid-area: info;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   color: rgba(255,255,255,0.7);
   font-size: 0.85rem;
@@ -70,60 +118,277 @@
   50%       { opacity: 0.4; }
 }
 
-.board__discards {
+/* ── Discard areas ──────────────────────────────────────────────────────── */
+/* Fixed-size areas (6 tiles × 4 rows, or transposed for left/right) so the
+   layout doesn't shift as discards accumulate, and the centre cell stays square. */
+/* top-d spans all 3 columns; tiles are rotated 180° (face the bottom player) */
+.board__discard-top {
+  grid-area: top-d;
+  width: var(--discard-w);
+  height: var(--discard-h);
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
+  align-items: flex-end;
+  justify-content: center;
+  align-self: center;
+  overflow: hidden;
+}
+.board__discard-top .discard-pile { transform: rotate(180deg); }
+
+/* Left/right: fixed footprint of 4 rows × 6 tiles (transposed), flushed toward the centre */
+.board__discard-left {
+  grid-area: left-d;
+  width: var(--discard-h);
+  height: var(--discard-w);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  align-self: center;
+  overflow: hidden;
 }
 
-.board__discard-area { width: 100%; display: flex; justify-content: center; }
-.board__discard-center { display: flex; justify-content: space-between; width: 100%; gap: 8px; }
+.board__discard-right {
+  grid-area: right-d;
+  width: var(--discard-h);
+  height: var(--discard-w);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  align-self: center;
+  overflow: hidden;
+}
 
-/* My area */
+/* Side discard piles — column-based, growing from centre outward */
+.side-discard {
+  display: flex;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+/* Left player: column 0 (oldest tiles) on the RIGHT (closest to centre) */
+.side-discard--left {
+  flex-direction: row-reverse;
+}
+
+/* Right player: column 0 (oldest tiles) on the LEFT (closest to centre) */
+.side-discard--right {
+  flex-direction: row;
+}
+
+.side-discard__col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Right player: tile top faces left (toward centre); overrides default rotate(90deg) */
+.side-discard--right .tile--horizontal .tile__img {
+  transform: rotate(-90deg);
+}
+
+/* bot-d spans all 3 columns */
+.board__discard-bot {
+  grid-area: bot-d;
+  width: var(--discard-w);
+  height: var(--discard-h);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  align-self: center;
+  overflow: hidden;
+}
+
+/* ── My area (bottom, fixed height) ─────────────────────────────────────── */
 .board__my-area {
-  padding: 8px 12px 12px;
+  position: relative;
+  padding: 6px 12px 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: rgba(0,0,0,0.2);
   border-top: 1px solid rgba(255,255,255,0.06);
+  overflow: hidden; /* fixed height — content must fit */
+}
+
+/* Turn timer — lower-left corner of my area */
+.board__my-turn-timer {
+  position: absolute;
+  bottom: 10px;
+  left: 16px;
+}
+
+.turn-countdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.75);
+  border: 3px solid #3498db;
+  color: #fff;
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.turn-countdown--urgent {
+  border-color: #e74c3c;
+  color: #e74c3c;
+  animation: pulse 0.5s infinite;
+}
+
+/* ── My hand row: melds inline on the left, hand tiles on the right ─────── */
+.board__my-hand-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 8px;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .board__my-hand {
   display: flex;
   gap: 4px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
   min-height: 72px;
 }
 
-.board__my-melds,
-.board__my-flowers {
+.board__hand-separator {
+  width: 10px;
+  flex-shrink: 0;
+  border-left: 2px solid rgba(255, 255, 255, 0.25);
+  margin: 4px 2px;
+}
+
+/* Melds are a flat row of meld groups, bottom-aligned with hand tiles */
+.board__my-melds {
   display: flex;
+  flex-direction: row;
   gap: 4px;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+/* Separator between meld section and hand */
+.board__my-melds + .board__my-hand {
+  border-left: 2px solid rgba(255, 255, 255, 0.15);
+  padding-left: 8px;
+}
+
+.board__meld {
+  display: flex;
+  gap: 2px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 4px;
+  padding: 2px;
+}
+
+/* Meld rotation for top player only (left/right use per-tile horizontal rendering) */
+.board__meld--rotate-top { transform: rotate(180deg); }
+
+/* Vertical meld layout for left/right player columns */
+.board__meld--col { flex-direction: column; }
+
+/* ── Chi picker ──────────────────────────────────────────────────────────── */
+.board__chi-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: rgba(10, 6, 22, 0.75);
+  border: 1.5px solid rgba(142, 68, 173, 0.5);
+  border-radius: 12px;
+  animation: chiPickerIn 0.15s ease;
+}
+
+@keyframes chiPickerIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.board__chi-picker-label {
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.55);
+}
+
+.board__chi-picker-options {
+  display: flex;
+  gap: 14px;
   flex-wrap: wrap;
   justify-content: center;
 }
 
-.board__meld { display: flex; gap: 2px; background: rgba(255,255,255,0.05); border-radius: 4px; padding: 2px; }
+.board__chi-option {
+  display: flex;
+  gap: 3px;
+  padding: 6px 8px;
+  background: rgba(142, 68, 173, 0.15);
+  border: 2px solid rgba(142, 68, 173, 0.4);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, transform 0.1s;
+}
+.board__chi-option:hover {
+  background: rgba(142, 68, 173, 0.45);
+  border-color: rgba(192, 100, 230, 0.85);
+  transform: translateY(-3px);
+}
+.board__chi-option:active { transform: translateY(0) scale(0.97); }
 
+.board__chi-cancel {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.45);
+  font-size: 0.8rem;
+  padding: 3px 18px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.board__chi-cancel:hover { color: rgba(255,255,255,0.75); border-color: rgba(255,255,255,0.4); }
+
+/* ── Chi picker overlay (fixed, full-viewport backdrop) ─────────────────── */
+.board__chi-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+/* ── Controls (fixed, hovers above the hand area) ───────────────────────── */
 .board__controls {
+  position: fixed;
+  bottom: 188px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
   display: flex;
   gap: 12px;
   align-items: flex-end;
   flex-wrap: wrap;
   justify-content: center;
+  pointer-events: none;
 }
 
+.board__controls > * {
+  pointer-events: auto;
+}
+
+/* ── My info ─────────────────────────────────────────────────────────────── */
 .board__my-info {
   display: flex;
   gap: 10px;
   align-items: center;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: rgba(255,255,255,0.6);
+  flex-shrink: 0;
 }
 
 .board__my-name { color: #fff; font-weight: 600; }
@@ -140,13 +405,13 @@
 }
 .board__my-turn { background: rgba(52,152,219,0.25); color: #3498db; }
 
-/* Player areas */
+/* ── Player areas (top/left/right) ──────────────────────────────────────── */
 .player-area {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 4px;
+  padding: 4px 6px;
   border-radius: 8px;
   transition: background 0.2s;
 }
@@ -158,9 +423,9 @@
 
 .player-area__info {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   flex-wrap: wrap;
   justify-content: center;
 }
@@ -168,17 +433,320 @@
 .player-area__name { color: #fff; font-weight: 600; }
 .player-area__wind { color: #f0c040; }
 .player-area__score { color: rgba(255,255,255,0.5); }
-.player-area__dealer { background: rgba(240,192,64,0.25); color: #f0c040; padding: 0 6px; border-radius: 8px; font-size: 0.7rem; font-weight: 700; }
-.player-area__ai { background: rgba(231,76,60,0.25); color: #e74c3c; padding: 0 6px; border-radius: 8px; font-size: 0.7rem; }
-.player-area__dc { background: rgba(149,165,166,0.2); color: #95a5a6; padding: 0 6px; border-radius: 8px; font-size: 0.7rem; }
+.player-area__dealer { background: rgba(240,192,64,0.25); color: #f0c040; padding: 0 5px; border-radius: 8px; font-size: 0.68rem; font-weight: 700; }
+.player-area__ai { background: rgba(231,76,60,0.25); color: #e74c3c; padding: 0 5px; border-radius: 8px; font-size: 0.68rem; }
+.player-area__dc { background: rgba(149,165,166,0.2); color: #95a5a6; padding: 0 5px; border-radius: 8px; font-size: 0.68rem; }
 
+/* Hand tiles: row for top player, column for left/right */
 .player-area__hand { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
-.player-area__hand--vertical { flex-direction: column; }
+
+/* Left/right players: hand is a column of horizontal (landscape) tiles */
+.player-area__hand--col {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+/* Unified tile column for left/right players (hand + melds stacked vertically) */
+.player-area__tiles-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+}
+
+/* Visual divider between hand and melds in the tiles column */
+.player-area__meld-sep {
+  width: 80%;
+  height: 1px;
+  background: rgba(255,255,255,0.2);
+  margin: 2px 0;
+  flex-shrink: 0;
+}
+
+/* Melds column for left/right players (each meld is a column of horizontal tiles) */
+.player-area__melds-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+}
+
 .player-area__melds { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; }
 .player-area__flowers { display: flex; gap: 2px; }
 
-/* Responsive */
+/* Top player: hand + melds in one horizontal row */
+.player-area__top-body {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* ── Tenpai "!" button ──────────────────────────────────────────────────── */
+.board__tenpai-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(240, 192, 64, 0.15);
+  border: 2.5px solid #f0c040;
+  color: #f0c040;
+  font-size: 1.5rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  animation: tenpai-pulse 1.8s ease-in-out infinite;
+}
+
+.board__tenpai-btn:hover {
+  background: rgba(240, 192, 64, 0.35);
+  transform: scale(1.1);
+  box-shadow: 0 0 12px rgba(240, 192, 64, 0.5);
+  animation: none;
+}
+
+.board__tenpai-btn:active {
+  transform: scale(0.95);
+}
+
+@keyframes tenpai-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 192, 64, 0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(240, 192, 64, 0); }
+}
+
+/* ── Tenpai panel overlay ───────────────────────────────────────────────── */
+.board__tenpai-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0 20px 200px 0;
+  z-index: 150;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.tenpai-panel {
+  background: rgba(10, 20, 35, 0.95);
+  border: 1.5px solid rgba(240, 192, 64, 0.45);
+  border-radius: 14px;
+  padding: 14px 18px;
+  min-width: 240px;
+  max-width: 340px;
+  max-height: 70vh;
+  overflow-y: auto;
+  animation: tenpaiPanelIn 0.18s ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes tenpaiPanelIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.tenpai-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.tenpai-panel__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f0c040;
+}
+
+.tenpai-panel__close {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.12s;
+}
+.tenpai-panel__close:hover { color: rgba(255, 255, 255, 0.8); }
+
+.tenpai-panel__loading,
+.tenpai-panel__empty {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 16px 0;
+}
+
+.tenpai-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tenpai-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tenpai-panel__row--weak {
+  opacity: 0.55;
+}
+
+.tenpai-panel__tile {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 70px;
+}
+
+.tenpai-panel__tile-label {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+}
+
+.tenpai-panel__fan {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.tenpai-panel__fan-ok   { color: #2ecc71; }
+.tenpai-panel__fan-low  { color: rgba(255, 255, 255, 0.35); font-weight: 400; font-size: 0.75rem; }
+
+.tenpai-panel__remaining {
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-width: 42px;
+  text-align: right;
+}
+
+.tenpai-panel__remaining--ok   { color: #3498db; }
+.tenpai-panel__remaining--low  { color: #e67e22; }
+.tenpai-panel__remaining--dead { color: #e74c3c; }
+
+/* ── Settings button & panel (upper-right corner) ───────────────────────── */
+.board__settings-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 220;
+  transition: background 0.12s, transform 0.1s;
+}
+.board__settings-btn:hover {
+  background: rgba(0, 0, 0, 0.55);
+  transform: rotate(20deg);
+}
+
+.board__settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+}
+
+.board__settings-panel {
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+  padding: 14px 16px;
+  background: rgba(10, 20, 35, 0.95);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  animation: tenpaiPanelIn 0.15s ease;
+}
+
+.board__settings-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f0c040;
+  margin-bottom: 2px;
+}
+
+.board__settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.board__settings-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.board__settings-toggle {
+  min-width: 48px;
+  padding: 4px 12px;
+  border-radius: 14px;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.board__settings-toggle--on {
+  background: rgba(46, 204, 113, 0.25);
+  border-color: #2ecc71;
+  color: #2ecc71;
+}
+
+.board__settings-extend {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(52, 152, 219, 0.5);
+  background: rgba(52, 152, 219, 0.15);
+  color: #3498db;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.1s;
+}
+
+.board__settings-extend:hover {
+  background: rgba(52, 152, 219, 0.35);
+}
+
+.board__settings-extend:active {
+  transform: scale(0.97);
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .board__middle { grid-template-columns: 80px 1fr 80px; }
-  .board__my-hand .tile--lg { width: 38px; height: 52px; }
+  .board__middle { grid-template-columns: 70px 1fr 70px; }
+}
+
+@media (max-height: 650px) {
+  .board { grid-template-rows: 60px 1fr 155px; }
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SettlementData, GameState } from '../../types';
 import TileComponent from '../TileComponent';
 import { windLabel } from '../../utils/tiles';
@@ -9,13 +9,14 @@ interface SettlementProps {
   gameState: GameState;
   myPlayerId: string;
   onNext: () => void;
-  onHostNext: () => void;
-  isHost: boolean;
+  onReady: () => void;
+  readyCount: number;
 }
 
 export default function Settlement({
-  data, gameState, myPlayerId, onNext, onHostNext, isHost,
+  data, gameState, myPlayerId, onNext, onReady, readyCount,
 }: SettlementProps) {
+  const [hasReady, setHasReady] = useState(false);
   const winner = data.winner ? gameState.players[data.winner] : null;
   const payer = data.payer ? gameState.players[data.payer] : null;
   const isGameOver = data.nextRound === null;
@@ -89,21 +90,23 @@ export default function Settlement({
 
         {isGameOver ? (
           <div className="settlement__footer">
-            <p className="settlement__gameover">全场结束！共 16 局</p>
+            <p className="settlement__gameover">全场结束！共 {gameState.round.maxRounds} 局</p>
+            <button className="settlement__btn" onClick={onNext}>确认</button>
           </div>
         ) : (
           <div className="settlement__footer">
             <p className="settlement__next-info">
               下一局：{data.nextRound && windLabel(data.nextRound.wind)}风圈 第{data.nextRound?.roundIndex}局
-              （全场第{data.nextRound?.totalRound}/16局）
+              （全场第{data.nextRound?.totalRound}/{data.nextRound?.maxRounds}局）
             </p>
-            {isHost ? (
-              <button className="settlement__btn" onClick={onHostNext}>
-                继续下局
-              </button>
-            ) : (
-              <p className="settlement__waiting">等待房主开始下一局…</p>
-            )}
+            <button
+              className={`settlement__btn ${hasReady ? 'settlement__btn--ready' : ''}`}
+              onClick={() => { if (!hasReady) { setHasReady(true); onReady(); } }}
+              disabled={hasReady}
+            >
+              {hasReady ? '已准备' : '准备下一局'}
+            </button>
+            <p className="settlement__ready-count">{readyCount} / 4 已准备</p>
           </div>
         )}
       </div>
