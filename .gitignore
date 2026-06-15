@@ -1,9 +1,13 @@
 node_modules/
 dist/
+package-lock.json
+e2e/playwright-report/
+e2e/test-results/
 .env
 *.env.local
 .DS_Store
 *.log
 redis_data/
 nginx/ssl/
+nginx/.htpasswd
 client/dist/
