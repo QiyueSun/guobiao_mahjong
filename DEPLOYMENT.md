@@ -18,7 +18,7 @@ You'll need:
 - A free DuckDNS hostname (used for DNS + TLS + the Google OAuth redirect —
   see below). You don't need to own a real domain.
 - ~30 minutes for the first deploy (plus a long wait for the first Docker
-  build on a slow VM — see Part 5).
+  build on a slow VM — see Part 4).
 
 **What "Always Free" means**: GCP's `e2-micro` instance (1 shared vCPU, 1GB
 RAM, 30GB standard persistent disk) is free *forever*, not a 12-month trial —
@@ -77,7 +77,7 @@ your friends.
      but Standard is simplest and free for one address attached to a running
      VM)
    - Attach it to your `mahjong-server` instance.
-   - Note this IP — you'll enter it into DuckDNS in Part 3.
+   - Note this IP — you'll enter it into DuckDNS in Part 3 (35.212.149.75)
 
 5. **Confirm firewall rules** allow SSH/HTTP/HTTPS: VPC network → Firewall.
    The default `default-allow-ssh` rule (port 22) should already exist, and
@@ -114,7 +114,7 @@ your friends.
 
 3. **Clone the repo**:
    ```bash
-   sudo apt-get update && sudo apt-get install -y git
+   sudo apt-get update && sudo apt-get install -y git nano
    git clone <your-repo-url> mahjong
    cd mahjong
    ```
@@ -126,9 +126,13 @@ your friends.
    Generate random secrets:
    ```bash
    openssl rand -hex 32   # use for SESSION_SECRET
+   d8803952c9d01e65170172ef7f756194160583ca67a6eaf9ba9e271b009a44e3
    openssl rand -hex 16   # use for POSTGRES_PASSWORD and REDIS_PASSWORD
+   10aa65bca594be1b36068c92e2203042
    ```
-   Edit `.env` and set:
+   Edit `.env` (minimal Ubuntu images don't ship with `vi`/`vim`, so use
+   `nano .env` — edit values, then **Ctrl+O** then Enter to save, **Ctrl+X**
+   to exit) and set:
    - `POSTGRES_PASSWORD=<generated>`
    - `SESSION_SECRET=<generated>`
    - `REDIS_PASSWORD=<generated>`
@@ -172,26 +176,13 @@ your friends.
    Add this line (runs daily at 3am; certbot only actually renews when
    within 30 days of expiry):
    ```
-   0 3 * * * certbot renew --quiet --deploy-hook "cp /etc/letsencrypt/live/mahjong-jerry.duckdns.org/*.pem /home/<your-user>/mahjong/nginx/ssl/ && cd /home/<your-user>/mahjong && docker compose -f docker-compose.prod.yml restart nginx"
+   0 3 * * * certbot renew --quiet --deploy-hook "cp /etc/letsencrypt/live/mahjong-jerry.duckdns.org/*.pem /home/qiyue_jerry_sun/mahjong/nginx/ssl/ && cd /home/qiyue_jerry_sun/mahjong && docker compose -f docker-compose.prod.yml restart nginx"
    ```
-   Replace `<your-user>` with your actual username (`whoami`).
+   Replace `<your-user>` with your actual username qiyue_jerry_sun (`whoami`).
 
 ---
 
-## Part 4 — Friends-only access (Basic Auth)
-
-Generate the shared-password file the nginx config already expects at
-`nginx/.htpasswd`:
-```bash
-mkdir -p nginx
-docker run --rm httpd:alpine htpasswd -nbB friends yourSharedPassword > nginx/.htpasswd
-```
-Share the username (`friends`) and `yourSharedPassword` with the people
-you're inviting — their browser will prompt for these once per device.
-
----
-
-## Part 5 — Build and launch
+## Part 4 — Build and launch
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
@@ -220,7 +211,7 @@ restart without manual steps.
 
 ---
 
-## Part 6 — Is GCP's free tier good enough?
+## Part 5 — Is GCP's free tier good enough?
 
 Watch these after a few real game sessions with friends:
 
