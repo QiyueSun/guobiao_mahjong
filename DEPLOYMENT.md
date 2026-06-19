@@ -211,7 +211,58 @@ restart without manual steps.
 
 ---
 
-## Part 5 — Is GCP's free tier good enough?
+## Part 5 — CI/CD: automatic deploys via GitHub Actions
+
+After the initial setup, every `git push` to `main` will run the unit tests and
+— if they pass — SSH into the VM, `git pull`, and restart the server container
+automatically. The workflow lives at `.github/workflows/deploy.yml`.
+
+### One-time setup (do this once; survives VM reboots)
+
+**1. Generate a dedicated deploy SSH key** (run on your local machine):
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/mahjong_deploy -N ""
+```
+This creates `~/.ssh/mahjong_deploy` (private) and `~/.ssh/mahjong_deploy.pub`
+(public). Keep the private key safe — don't commit it.
+
+**2. Authorize the key on the VM** (SSH in once, then never again for this):
+```bash
+echo "$(cat ~/.ssh/mahjong_deploy.pub)" >> ~/.ssh/authorized_keys
+```
+`~/.ssh/authorized_keys` lives on the persistent disk and survives reboots.
+You only need to redo this if the VM is **deleted and recreated** from scratch
+(not on restarts — just reuse the same key pair you generated above).
+
+**3. Add three secrets to GitHub**
+(`Settings → Secrets and variables → Actions → New repository secret`):
+
+| Secret name | Value |
+|-------------|-------|
+| `DEPLOY_SSH_KEY` | Full contents of `~/.ssh/mahjong_deploy` (private key, including the `-----BEGIN...` lines) |
+| `VM_HOST` | VM's static IP or `mahjong-jerry.duckdns.org` |
+| `VM_USER` | `qiyue_jerry_sun` |
+
+That's it. From now on, `git push origin main` triggers the pipeline.
+
+### What the pipeline does
+
+1. **test** job — installs server deps and runs the 101 Jest unit tests.
+2. **deploy** job (only runs if tests pass) — SSH's into the VM, runs
+   `git pull`, then `docker compose -f docker-compose.prod.yml up -d --no-deps server`
+   to restart only the server container with the new code.
+
+### Moving to a new VM
+
+If you ever recreate the VM (e.g., pivoting to Hetzner):
+1. Reuse the same `~/.ssh/mahjong_deploy` key pair — no need to regenerate or
+   update GitHub secrets.
+2. Repeat Step 2 above on the new VM (copy the public key to `authorized_keys`).
+3. Update the `VM_HOST` GitHub secret to the new IP/hostname.
+
+---
+
+## Part 6 — Is GCP's free tier good enough?
 
 Watch these after a few real game sessions with friends:
 

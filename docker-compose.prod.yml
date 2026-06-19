@@ -23,6 +23,8 @@ services:
       - NODE_ENV=production
       - LOG_LEVEL=info
       - DATABASE_URL=postgresql://mahjong:${POSTGRES_PASSWORD}@postgres:5432/mahjong
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
