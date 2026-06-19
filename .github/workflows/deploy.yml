@@ -23,4 +23,4 @@ jobs:
           ssh -i /tmp/deploy_key \
             -o StrictHostKeyChecking=no \
             ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} \
-            'cd ~/mahjong && git fetch origin && git reset --hard origin/main && docker compose -f docker-compose.prod.yml up -d --no-deps server'
+            'cd ~/mahjong && git fetch origin && git reset --hard origin/main && docker compose -f docker-compose.prod.yml up -d --no-deps server && docker compose -f docker-compose.prod.yml restart nginx'
