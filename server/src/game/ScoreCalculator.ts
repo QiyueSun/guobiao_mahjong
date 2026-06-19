@@ -1,6 +1,6 @@
 import { PlayerId, FanResult } from '../types';
 
-const MIN_FAN = 8;
+const BASE = 8;
 
 export function calcScoreDeltas(
   winner: PlayerId,
@@ -8,19 +8,22 @@ export function calcScoreDeltas(
   fanResult: FanResult,
   playerIds: PlayerId[],
 ): Record<PlayerId, number> {
-  const total = Math.max(MIN_FAN, fanResult.total);
+  // Total payment = fan (including flowers) + 8
+  const payment = fanResult.total + BASE;
   const deltas: Record<PlayerId, number> = {};
   for (const pid of playerIds) deltas[pid] = 0;
 
   if (payer === null) {
-    // Self-draw: each other player pays `total`
+    // Self-draw: all 3 others each pay (fan + 8)
     const others = playerIds.filter(p => p !== winner);
-    deltas[winner] = total * others.length;
-    for (const p of others) deltas[p] = -total;
+    deltas[winner] = payment * others.length;
+    for (const p of others) deltas[p] = -payment;
   } else {
-    // Discard win: only the payer pays (3× total)
-    deltas[winner] = total * 3;
-    deltas[payer] = -total * 3;
+    // Discard win: 放炮者 pays (fan + 8), other 2 each pay 8
+    const others = playerIds.filter(p => p !== winner && p !== payer);
+    deltas[winner] = payment + BASE * others.length;
+    deltas[payer] = -payment;
+    for (const p of others) deltas[p] = -BASE;
   }
 
   return deltas;

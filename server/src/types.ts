@@ -167,7 +167,7 @@ export interface Group {
 }
 
 export interface Decomposition {
-  type: 'standard' | 'seven-pairs' | 'knitted';
+  type: 'standard' | 'seven-pairs' | 'knitted' | 'combination-dragon';
   groups: Group[];
   allTiles: Tile[];
   concealedTiles: Tile[];

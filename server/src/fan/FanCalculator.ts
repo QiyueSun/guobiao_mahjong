@@ -785,6 +785,8 @@ const ALL_RULES: FanRule[] = [
     exclude: () => ['双暗杠', '双明杠', '明暗杠', '暗杠', '明杠'] },
   { name: '一色四步高', value: 32, match: (d) => b(fourShiftedChows(d)),
     exclude: () => ['一色三步高', '连六'] },
+  { name: '混幺九', value: 32, match: (d) => b(mixedTerminals(d)),
+    exclude: () => ['碰碰和', '幺九刻'] },
 
   // 24番
   { name: '七对', value: 24, match: (d) => b(d.type === 'seven-pairs'),
@@ -816,17 +818,17 @@ const ALL_RULES: FanRule[] = [
   { name: '小于五', value: 12, match: (d) => b(lowerFour(d)) },
   { name: '三风刻', value: 12, match: (d) => b(threeWindPungs(d)),
     exclude: () => ['幺九刻'] },
+  { name: '组合龙', value: 12, match: (d) => b(d.type === 'combination-dragon'),
+    exclude: () => ['平和'] },
 
   // 8番
   { name: '混一色', value: 6, match: (d) => b(halfFlush(d)),
     exclude: () => ['断幺'] },
-  { name: '天和', value: 8, match: (_d, ctx) => b(heavenlyHand(ctx)) },
-  { name: '地和', value: 8, match: (_d, ctx) => b(earthlyHand(ctx)) },
   { name: '花龙', value: 8, match: (d) => b(mixedStraight(d)) },
   { name: '推不倒', value: 8, match: (d) => b(reversibleTiles(d)) },
   { name: '三色三同顺', value: 8, match: (d) => b(tripleHomogeneousChow(d)) },
   { name: '三色三节高', value: 8, match: (d) => b(tripleColorSteppedPungs(d)) },
-  { name: '双暗杠', value: 8, match: (d) => b(twoConcealedKongs(d)),
+  { name: '双暗杠', value: 6, match: (d) => b(twoConcealedKongs(d)),
     exclude: () => ['暗杠'] },
   { name: '杠上开花', value: 8, match: (_d, ctx) => b(kongDraw(ctx)),
     exclude: () => ['自摸'] },
@@ -844,7 +846,7 @@ const ALL_RULES: FanRule[] = [
   { name: '明暗杠', value: 6, match: (d) => b(mixedKongs(d)),
     exclude: () => ['暗杠', '明杠'] },
   { name: '五门齐', value: 6, match: (d) => b(allFiveFamilies(d)) },
-  { name: '全不靠', value: 6, match: (d) => b(knittedHand(d)) },
+  { name: '全不靠', value: 12, match: (d) => b(knittedHand(d)) },
   { name: '三色三步高', value: 6, match: (d) => b(triColorSteppedChow(d)) },
 
   // 4番
@@ -883,7 +885,7 @@ const ALL_RULES: FanRule[] = [
   { name: '连六', value: 1, match: (d) => b(shortStraight(d)) },
   { name: '老少副', value: 1, match: (d) => b(terminalChows(d)) },
   { name: '幺九刻', value: 1, match: (d) => terminalPungCount(d) },
-  { name: '暗杠', value: 1, match: (d) => concealedKongCount(d) },
+  { name: '暗杠', value: 2, match: (d) => concealedKongCount(d) },
   { name: '明杠', value: 1, match: (d) => openKongCount(d) },
   { name: '一般高', value: 1, match: (d) => pureDoubleChowCount(d) },
   { name: '喜相逢', value: 1, match: (d) => b(mixedDoubleChow(d)) },
@@ -894,13 +896,9 @@ const SORTED_RULES = [...ALL_RULES].sort((a, c) => c.value - a.value);
 
 // ── 花牌加分 ──────────────────────────────────────────────────────────────────
 
-// 本座花（春夏秋冬1-4 / 梅兰竹菊5-8 与门风相对应）记2分，其余花牌记1分
-function calculateFlowerBonus(flowers: Tile[], seatWind: string): FlowerBonusEntry[] {
-  const seatValue = windValue(seatWind);
-  return flowers.map(f => ({
-    tile: f,
-    bonus: (f.value === seatValue || f.value === seatValue + 4) ? 2 : 1,
-  }));
+// 每张花牌计1番，仅计和牌者自身的花牌
+function calculateFlowerBonus(flowers: Tile[], _seatWind: string): FlowerBonusEntry[] {
+  return flowers.map(f => ({ tile: f, bonus: 1 }));
 }
 
 // ── 主计算入口 ────────────────────────────────────────────────────────────────

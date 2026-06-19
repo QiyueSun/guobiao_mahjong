@@ -14,14 +14,19 @@ function fanResult(total: number): FanResult {
 
 const PLAYERS = ['p1', 'p2', 'p3', 'p4'];
 
+// New formula: payment = fan + 8
+// 自摸: all 3 others pay (fan + 8); winner gains (fan + 8) × 3
+// 点和: 放炮者 pays (fan + 8); other 2 pay 8; winner gains (fan + 8) + 8 + 8
+
 describe('calcScoreDeltas', () => {
   describe('self-draw (摸和)', () => {
-    test('winner gains total×3, each other pays total', () => {
+    test('each other pays (fan+8), winner gains that × 3', () => {
       const deltas = calcScoreDeltas('p1', null, fanResult(16), PLAYERS);
-      expect(deltas['p1']).toBe(48);  // 16 × 3
-      expect(deltas['p2']).toBe(-16);
-      expect(deltas['p3']).toBe(-16);
-      expect(deltas['p4']).toBe(-16);
+      const payment = 16 + 8; // 24
+      expect(deltas['p1']).toBe(payment * 3);   // 72
+      expect(deltas['p2']).toBe(-payment);       // -24
+      expect(deltas['p3']).toBe(-payment);       // -24
+      expect(deltas['p4']).toBe(-payment);       // -24
     });
 
     test('zero-sum: all deltas sum to 0', () => {
@@ -32,12 +37,13 @@ describe('calcScoreDeltas', () => {
   });
 
   describe('discard win (点和)', () => {
-    test('winner gains total×3, payer loses total×3', () => {
+    test('放炮者 pays (fan+8); other 2 pay 8; winner gains (fan+8)+16', () => {
       const deltas = calcScoreDeltas('p1', 'p3', fanResult(16), PLAYERS);
-      expect(deltas['p1']).toBe(48);   // 16 × 3
-      expect(deltas['p2']).toBe(0);
-      expect(deltas['p3']).toBe(-48);  // -16 × 3
-      expect(deltas['p4']).toBe(0);
+      const payment = 16 + 8; // 24
+      expect(deltas['p1']).toBe(payment + 8 + 8); // 40
+      expect(deltas['p2']).toBe(-8);
+      expect(deltas['p3']).toBe(-payment);         // -24
+      expect(deltas['p4']).toBe(-8);
     });
 
     test('zero-sum: all deltas sum to 0', () => {
@@ -47,29 +53,31 @@ describe('calcScoreDeltas', () => {
     });
   });
 
-  describe('minimum 8-fan floor', () => {
-    test('total < 8 is floored to 8 for self-draw', () => {
-      const deltas = calcScoreDeltas('p1', null, fanResult(4), PLAYERS);
-      // Floor applies: 8 × 3 = 24 for winner
-      expect(deltas['p1']).toBe(24);
+  describe('base payment of +8', () => {
+    test('fan=0: payment is 8 (self-draw)', () => {
+      const deltas = calcScoreDeltas('p1', null, fanResult(0), PLAYERS);
+      expect(deltas['p1']).toBe(24);   // 8 × 3
       expect(deltas['p2']).toBe(-8);
     });
 
-    test('total < 8 is floored to 8 for discard win', () => {
-      const deltas = calcScoreDeltas('p1', 'p2', fanResult(3), PLAYERS);
-      expect(deltas['p1']).toBe(24);   // 8 × 3
-      expect(deltas['p2']).toBe(-24);
+    test('fan=0: payment is 8 (discard win)', () => {
+      const deltas = calcScoreDeltas('p1', 'p2', fanResult(0), PLAYERS);
+      expect(deltas['p1']).toBe(8 + 8 + 8); // 24
+      expect(deltas['p2']).toBe(-8);
+      expect(deltas['p3']).toBe(-8);
+      expect(deltas['p4']).toBe(-8);
     });
 
-    test('total exactly 8: no change', () => {
+    test('fan=8 (minimum win): payment is 16', () => {
       const deltas = calcScoreDeltas('p1', null, fanResult(8), PLAYERS);
-      expect(deltas['p1']).toBe(24);
+      expect(deltas['p1']).toBe((8 + 8) * 3); // 48
     });
 
-    test('total > 8: no floor applied', () => {
+    test('fan=48: payment is 56 (self-draw)', () => {
       const deltas = calcScoreDeltas('p1', null, fanResult(48), PLAYERS);
-      expect(deltas['p1']).toBe(144);  // 48 × 3
-      expect(deltas['p2']).toBe(-48);
+      const payment = 48 + 8; // 56
+      expect(deltas['p1']).toBe(payment * 3); // 168
+      expect(deltas['p2']).toBe(-payment);    // -56
     });
   });
 

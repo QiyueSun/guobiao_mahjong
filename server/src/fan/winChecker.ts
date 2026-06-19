@@ -39,6 +39,7 @@ export function isWinnable(handTiles: Tile[], melds: Meld[]): boolean {
 
   if (isSevenPairs(playTiles)) return true;
   if (isKnittedHand(playTiles)) return true;
+  if (melds.length === 0 && isOrganicDragon(playTiles)) return true;
   return canFormStandard(sortTiles([...playTiles]), neededGroups);
 }
 
@@ -78,6 +79,20 @@ export function decompose(
       concealedTiles: playTiles,
       melds: [],
     });
+  }
+
+  // Combination dragon (组合龙): 147/258/369 across 3 suits + 1 chow + 1 pair
+  if (melds.length === 0 && isOrganicDragon(playTiles)) {
+    const decompResult = decomposeOrganicDragon(playTiles);
+    if (decompResult) {
+      results.push({
+        type: 'combination-dragon',
+        groups: [decompResult.chow, decompResult.pair],
+        allTiles: fullTiles,
+        concealedTiles: playTiles,
+        melds: [],
+      });
+    }
   }
 
   // Standard (4 melds + 1 pair)
@@ -257,6 +272,67 @@ export function isSevenPairs(tiles: Tile[]): boolean {
     if (v !== 2) return false;
   }
   return counts.size === 7;
+}
+
+// ── Combination dragon (组合龙) ───────────────────────────────────────────────
+
+function canFormOneChow(tiles: Tile[]): boolean {
+  if (tiles.length !== 3) return false;
+  if (!tiles.every(isNumberSuit)) return false;
+  if (new Set(tiles.map(t => t.suit)).size !== 1) return false;
+  const vals = tiles.map(t => t.value).sort((a, b) => a - b);
+  return vals[1] === vals[0] + 1 && vals[2] === vals[1] + 1;
+}
+
+function extractChowAndPair(tiles: Tile[]): { chow: Group; pair: Group } | null {
+  if (tiles.length !== 5) return null;
+  for (let i = 0; i < tiles.length; i++) {
+    for (let j = i + 1; j < tiles.length; j++) {
+      if (!sameTile(tiles[i], tiles[j])) continue;
+      const rest = tiles.filter((_, k) => k !== i && k !== j);
+      if (canFormOneChow(rest)) {
+        return {
+          chow: { type: 'chow', tiles: rest, concealed: true },
+          pair: { type: 'pair', tiles: [tiles[i], tiles[j]], concealed: true },
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function tryOrganicDragonPerm(tiles: Tile[], perm: number[][]): { chow: Group; pair: Group } | null {
+  const suits = ['man', 'pin', 'sou'] as const;
+  const indices = new Set<number>();
+
+  for (let s = 0; s < 3; s++) {
+    const suit = suits[s];
+    for (const v of perm[s]) {
+      const idx = tiles.findIndex((t, i) => !indices.has(i) && t.suit === suit && t.value === v);
+      if (idx === -1) return null;
+      indices.add(idx);
+    }
+  }
+  return extractChowAndPair(tiles.filter((_, i) => !indices.has(i)));
+}
+
+export function isOrganicDragon(tiles: Tile[]): boolean {
+  if (tiles.length !== 14) return false;
+  if (!tiles.every(isNumberSuit)) return false;
+  const patterns = [[1, 4, 7], [2, 5, 8], [3, 6, 9]];
+  for (const perm of permutations(patterns)) {
+    if (tryOrganicDragonPerm(tiles, perm) !== null) return true;
+  }
+  return false;
+}
+
+function decomposeOrganicDragon(tiles: Tile[]): { chow: Group; pair: Group } | null {
+  const patterns = [[1, 4, 7], [2, 5, 8], [3, 6, 9]];
+  for (const perm of permutations(patterns)) {
+    const result = tryOrganicDragonPerm(tiles, perm);
+    if (result) return result;
+  }
+  return null;
 }
 
 // ── Knitted hand (七星不靠 / greater honors + knitted tiles) ──────────────────

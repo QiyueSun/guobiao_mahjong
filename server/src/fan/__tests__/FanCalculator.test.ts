@@ -394,8 +394,8 @@ describe('seat/round wind pungs (4 fan each)', () => {
 // ── Flower bonus ──────────────────────────────────────────────────────────────
 
 describe('flower bonus', () => {
-  test('own-seat flower (east=1) scores 2; others score 1', () => {
-    // East seat: flower 1 (春) is own-seat, flower 2 (夏) is other
+  test('each flower scores 1 fan regardless of seat wind', () => {
+    // East seat: flower 1 (春) and flower 2 (夏) — both score 1
     const ctx = baseCtx({
       hand: [
         man(1), man(2), man(3),
@@ -411,11 +411,11 @@ describe('flower bonus', () => {
     });
     const result = calculateFan(ctx);
     const bonuses = result.flowerBonus;
-    const ownSeatBonus = bonuses.find(b => b.tile.value === 1);
-    const otherBonus = bonuses.find(b => b.tile.value === 2);
-    expect(ownSeatBonus?.bonus).toBe(2);
-    expect(otherBonus?.bonus).toBe(1);
-    expect(result.flowerTotal).toBe(3);
+    const flower1Bonus = bonuses.find(b => b.tile.value === 1);
+    const flower2Bonus = bonuses.find(b => b.tile.value === 2);
+    expect(flower1Bonus?.bonus).toBe(1);
+    expect(flower2Bonus?.bonus).toBe(1);
+    expect(result.flowerTotal).toBe(2);
   });
 
   test('no flowers = zero flowerTotal', () => {
@@ -662,7 +662,7 @@ describe('Kong-related patterns: 暗杠 / 明杠 / 明暗杠 / 双暗杠 / 双�
       winType: 'self',
     });
     const result = calculateFan(ctx);
-    expect(result.fans.find(f => f.name === '暗杠')?.value).toBe(1);
+    expect(result.fans.find(f => f.name === '暗杠')?.value).toBe(2);
     expect(result.fans.map(f => f.name)).not.toContain('明杠');
   });
 
