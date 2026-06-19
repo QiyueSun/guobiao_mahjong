@@ -927,6 +927,32 @@ export class GameEngine {
     const p = this.state.players[playerId];
     if (p) p.isAI = true;
   }
+
+  // Permanently switch a player's seat to AI control (used when a player
+  // explicitly leaves). If it's currently their turn or they have a pending
+  // response, trigger the AI to act immediately instead of waiting for the
+  // action timer.
+  leaveAsAI(playerId: PlayerId): void {
+    const p = this.state.players[playerId];
+    if (!p) return;
+    p.isAI = true;
+    p.isConnected = false;
+    p.disconnectedAt = Date.now();
+
+    if (this.state.phase === 'player_turn' && this.state.currentTurn === playerId) {
+      this.scheduleAiAction(() => this.runAiTurn(playerId));
+    }
+    const pending = this.state.pendingActions.find(a => a.playerId === playerId && !a.responded);
+    if (pending) {
+      this.scheduleAiAction(() => this.runAiResponse(playerId));
+    }
+    this.emit({ type: 'stateUpdate' });
+  }
+
+  // Stop all pending timers. Called when the room is closed (e.g. host ends the game).
+  destroy(): void {
+    this.clearTimer();
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

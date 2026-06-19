@@ -104,6 +104,14 @@ export function useWebSocket() {
       store.setNextReadyCount(data.count);
     });
 
+    socket.on('room:left', () => {
+      store.leaveRoom();
+    });
+
+    socket.on('room:closed', () => {
+      store.leaveRoom();
+    });
+
     return () => {
       // Don't disconnect on unmount — keep session alive
     };

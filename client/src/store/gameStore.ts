@@ -55,6 +55,7 @@ interface GameStore {
   selectTile: (id: string | null) => void;
   clearSettlement: () => void;
   reset: () => void;
+  leaveRoom: () => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -138,5 +139,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     turnTimer: null,
     selectedTileId: null,
     gameStarted: false,
+  }),
+
+  leaveRoom: () => set({
+    roomState: null,
+    gameState: null,
+    myHand: [],
+    pendingDraw: null,
+    canActData: null,
+    fanHint: null,
+    tenpaiInfo: null,
+    settlement: null,
+    turnTimer: null,
+    selectedTileId: null,
+    gameStarted: false,
+    nextReadyCount: 0,
   }),
 }));

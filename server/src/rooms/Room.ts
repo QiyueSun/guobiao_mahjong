@@ -22,6 +22,7 @@ export class Room {
 
   engine: GameEngine | null = null;
   botIds: PlayerId[] = [];
+  leftPlayerIds = new Set<PlayerId>();
   nextReadySet = new Set<PlayerId>();
   private disconnectTimers = new Map<PlayerId, ReturnType<typeof setTimeout>>();
   private waitingDisconnectTimers = new Map<PlayerId, ReturnType<typeof setTimeout>>();
@@ -119,7 +120,17 @@ export class Room {
 
   allNextReady(): boolean {
     return this.playerIds.length === 4 &&
-      this.playerIds.every(p => this.botIds.includes(p) || this.nextReadySet.has(p));
+      this.playerIds.every(p => this.botIds.includes(p) || this.leftPlayerIds.has(p) || this.nextReadySet.has(p));
+  }
+
+  // Permanently hand a player's seat over to AI control. The player may not
+  // reconnect and retake their seat afterwards (see leftPlayerIds checks in
+  // RoomManager.joinRoom and the connection auto-restore in SocketHandler).
+  leaveGame(playerId: PlayerId): void {
+    this.leftPlayerIds.add(playerId);
+    const t = this.disconnectTimers.get(playerId);
+    if (t) { clearTimeout(t); this.disconnectTimers.delete(playerId); }
+    this.engine?.leaveAsAI(playerId);
   }
 
   handleDisconnect(playerId: PlayerId): void {

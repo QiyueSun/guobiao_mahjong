@@ -178,6 +178,42 @@ describe('player connection state', () => {
   });
 });
 
+// ── leaveAsAI (player explicitly leaves the game) ─────────────────────────────
+
+describe('leaveAsAI', () => {
+  test('marks the player as AI and disconnected', () => {
+    const engine = makeEngine();
+    engine.leaveAsAI('p2');
+    const p = engine.getState().players['p2'];
+    expect(p.isAI).toBe(true);
+    expect(p.isConnected).toBe(false);
+    expect(p.disconnectedAt).toBeDefined();
+  });
+
+  test('emits a stateUpdate so other players see the AI takeover', () => {
+    const events: GameEvent[] = [];
+    const engine = makeEngine(e => events.push(e));
+    engine.leaveAsAI('p2');
+    expect(events.some(e => e.type === 'stateUpdate')).toBe(true);
+  });
+
+  test('immediately takes over the current turn and discards', async () => {
+    const engine = makeEngine();
+    await engine.startRound();
+
+    const state = engine.getState();
+    const currentPlayer = state.currentTurn;
+    expect(state.phase).toBe('player_turn');
+    expect(state.players[currentPlayer].discards).toHaveLength(0);
+
+    engine.leaveAsAI(currentPlayer);
+
+    await new Promise(r => setTimeout(r, 1000));
+
+    expect(engine.getState().players[currentPlayer].discards.length).toBeGreaterThanOrEqual(1);
+  }, 10000);
+});
+
 // ── advanceToNextRound ────────────────────────────────────────────────────────
 
 describe('advanceToNextRound', () => {

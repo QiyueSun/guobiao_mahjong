@@ -49,3 +49,26 @@ describe('Room.beginRound', () => {
     expect(state.players['p2'].position).toBe('east');
   }, 15000);
 });
+
+describe('Room.leaveGame', () => {
+  test('hands the leaving player\'s seat to AI and marks them as permanently left', async () => {
+    const room = makeRoom();
+    await room.beginRound();
+
+    room.leaveGame('p3');
+
+    expect(room.leftPlayerIds.has('p3')).toBe(true);
+    expect(room.engine!.getState().players['p3'].isAI).toBe(true);
+    expect(room.engine!.getState().players['p3'].isConnected).toBe(false);
+  }, 15000);
+
+  test('allNextReady treats left players as ready without requiring their input', async () => {
+    const room = makeRoom();
+    await room.beginRound();
+
+    room.leaveGame('p3');
+    for (const p of ['p1', 'p2', 'p4']) room.markNextReady(p);
+
+    expect(room.allNextReady()).toBe(true);
+  }, 15000);
+});

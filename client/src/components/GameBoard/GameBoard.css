@@ -638,6 +638,33 @@
 .tenpai-panel__remaining--low  { color: #e67e22; }
 .tenpai-panel__remaining--dead { color: #e74c3c; }
 
+/* ── Leave/end game button (upper-left corner) ──────────────────────────── */
+.board__leave-btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 0 14px;
+  height: 36px;
+  border-radius: 18px;
+  background: rgba(231, 76, 60, 0.18);
+  border: 1.5px solid rgba(231, 76, 60, 0.5);
+  color: #e74c3c;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 220;
+  transition: background 0.12s, transform 0.1s;
+}
+.board__leave-btn:hover {
+  background: rgba(231, 76, 60, 0.35);
+}
+.board__leave-btn:active {
+  transform: scale(0.97);
+}
+
 /* ── Settings button & panel (upper-right corner) ───────────────────────── */
 .board__settings-btn {
   position: absolute;

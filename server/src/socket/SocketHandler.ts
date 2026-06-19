@@ -31,9 +31,9 @@ export function setupSocketHandler(io: Server): void {
       reconnected: !!existingPlayerId,
     });
 
-    // Auto-restore room session on reconnect
+    // Auto-restore room session on reconnect (skip if this player permanently left the room)
     const existingRoom = roomManager.getRoomByPlayer(playerId);
-    if (existingRoom) {
+    if (existingRoom && !existingRoom.leftPlayerIds.has(playerId)) {
       existingRoom.cancelWaitingDisconnect(playerId);
       existingRoom.handleReconnect(playerId);
       sessions[socket.id].roomCode = existingRoom.code;
@@ -120,6 +120,7 @@ export function setupSocketHandler(io: Server): void {
         socket.emit('game:error', {
           code: msg.includes('ROOM_NOT_FOUND') ? 'ROOM_NOT_FOUND'
             : msg.includes('ROOM_FULL') ? 'ROOM_FULL'
+            : msg.includes('ALREADY_LEFT') ? 'ALREADY_LEFT'
             : 'JOIN_FAILED',
           message: msg,
         });
@@ -270,6 +271,33 @@ export function setupSocketHandler(io: Server): void {
       if (!room?.engine) return;
       const timer = room.engine.extendCurrentTimer(10_000);
       if (timer) io.to(roomCode).emit('game:turnTimer', timer);
+    });
+
+    socket.on('game:leave', () => {
+      const { roomCode } = sessions[socket.id];
+      if (!roomCode) return;
+      const room = roomManager.getRoom(roomCode);
+      if (!room) return;
+
+      if (playerId === room.hostId) {
+        // Host leaving ends the game for everyone
+        io.to(roomCode).emit('room:closed', { reason: 'host_left' });
+        room.engine?.destroy();
+        for (const pid of room.playerIds) {
+          const sid = findSocketId(io, pid);
+          if (!sid) continue;
+          const s = io.sockets.sockets.get(sid);
+          s?.leave(roomCode);
+          if (sessions[sid]) sessions[sid].roomCode = null;
+        }
+        roomManager.closeRoom(roomCode);
+      } else {
+        room.leaveGame(playerId);
+        socket.leave(roomCode);
+        sessions[socket.id].roomCode = null;
+        socket.emit('room:left');
+        broadcastRoomState(io, roomCode);
+      }
     });
 
     socket.on('game:requestTenpaiInfo', () => {

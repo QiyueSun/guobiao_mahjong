@@ -70,6 +70,15 @@ export default function GameBoard() {
   const handlePass = () => emit('game:pass');
   const handleExtendTimer = () => emit('game:extend_timer');
 
+  const handleLeave = () => {
+    const message = isHost
+      ? '你是房主，离开后整场游戏将直接结束，确定要离开吗？'
+      : '离开后你的座位将交由 AI 代打，且无法再返回，确定要离开吗？';
+    if (window.confirm(message)) {
+      emitRaw('game:leave');
+    }
+  };
+
   const drawnTileId = pendingDraw?.tile?.id ?? null;
   const drawnTile = drawnTileId ? myHand.find(t => t.id === drawnTileId) ?? null : null;
   const sortedHandTiles = sortTiles(drawnTileId ? myHand.filter(t => t.id !== drawnTileId) : myHand);
@@ -96,6 +105,15 @@ export default function GameBoard() {
 
   return (
     <div className="board">
+      {/* Leave/end game — fixed button in the upper-left corner */}
+      <button
+        className="board__leave-btn"
+        onClick={handleLeave}
+        aria-label={isHost ? '结束游戏' : '离开游戏'}
+      >
+        {isHost ? '结束游戏' : '离开游戏'}
+      </button>
+
       {/* Settings — fixed button in the upper-right corner */}
       <button
         className="board__settings-btn"

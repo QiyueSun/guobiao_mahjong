@@ -25,6 +25,7 @@ class RoomManager {
   joinRoom(code: string, playerId: PlayerId, nickname: string): Room {
     const room = this.rooms.get(code.toUpperCase());
     if (!room) throw new Error('ROOM_NOT_FOUND');
+    if (room.leftPlayerIds.has(playerId)) throw new Error('ALREADY_LEFT');
     if (room.isFull && !room.playerIds.includes(playerId)) throw new Error('ROOM_FULL');
     if (room.phase === 'playing' && !room.playerIds.includes(playerId)) throw new Error('GAME_IN_PROGRESS');
 
