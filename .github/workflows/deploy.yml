@@ -9,9 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
       - name: Run unit tests
         run: cd server && npm install && npx jest --passWithNoTests
 
@@ -26,4 +23,4 @@ jobs:
           ssh -i /tmp/deploy_key \
             -o StrictHostKeyChecking=no \
             ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} \
-            'cd ~/mahjong && git pull && docker compose -f docker-compose.prod.yml up -d --no-deps server'
+            'cd ~/mahjong && git fetch origin && git reset --hard origin/main && docker compose -f docker-compose.prod.yml up -d --no-deps server'
