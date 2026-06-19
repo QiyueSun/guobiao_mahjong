@@ -29,7 +29,6 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
       - CLIENT_ORIGIN=${CLIENT_ORIGIN}
-    command: node dist/index.js
     volumes: []
     depends_on:
       - postgres
