@@ -49,6 +49,8 @@ export function decompose(
   melds: Meld[],
 ): Decomposition[] {
   const playTiles = [...handTiles.filter(t => !isFlower(t)), winTile];
+  const meldTiles = melds.flatMap(m => m.tiles);
+  const fullTiles = [...meldTiles, ...playTiles];
   const results: Decomposition[] = [];
 
   // Seven pairs
@@ -61,7 +63,7 @@ export function decompose(
     results.push({
       type: 'seven-pairs',
       groups,
-      allTiles: playTiles,
+      allTiles: fullTiles,
       concealedTiles: playTiles,
       melds,
     });
@@ -72,7 +74,7 @@ export function decompose(
     results.push({
       type: 'knitted',
       groups: [],
-      allTiles: playTiles,
+      allTiles: fullTiles,
       concealedTiles: playTiles,
       melds: [],
     });
@@ -93,7 +95,7 @@ export function decompose(
     results.push({
       type: 'standard',
       groups: [...meldGroups, ...groups],
-      allTiles: playTiles,
+      allTiles: fullTiles,
       concealedTiles: playTiles,
       melds,
     });

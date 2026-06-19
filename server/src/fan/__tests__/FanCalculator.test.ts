@@ -136,6 +136,23 @@ describe('24-fan: 清一色 (pure one suit)', () => {
     });
     expect(hasFan(ctx, '清一色')).toBe(false);
   });
+
+  test('a called meld of honor tiles disqualifies, even if the concealed hand is one suit', () => {
+    const ctx = baseCtx({
+      hand: [
+        man(1), man(2), man(3),
+        man(4), man(5), man(6),
+        man(7), man(8), man(9),
+        man(5),
+      ],
+      melds: [
+        { type: 'pong', tiles: [wind(4), wind(4), wind(4)] },
+      ],
+      winTile: man(5),
+      winType: 'self',
+    });
+    expect(hasFan(ctx, '清一色')).toBe(false);
+  });
 });
 
 // ── 48-fan: 七星不靠 (greater honors + knitted) ───────────────────────────────
