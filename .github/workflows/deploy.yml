@@ -17,10 +17,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
+        timeout-minutes: 20
         run: |
           install -m 600 /dev/null /tmp/deploy_key
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > /tmp/deploy_key
           ssh -i /tmp/deploy_key \
             -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=10 \
             ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} \
-            'cd ~/mahjong && git fetch origin && git reset --hard origin/main && docker compose -f docker-compose.prod.yml up -d --build --no-deps server client'
+            'cd ~/mahjong && git fetch origin && git reset --hard origin/main && DOCKER_BUILDKIT=1 docker compose -f docker-compose.prod.yml build server client && docker compose -f docker-compose.prod.yml up -d --no-build --no-deps server client'
